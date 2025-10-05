@@ -1,0 +1,505 @@
+﻿using System.Reflection;
+using System.Runtime.Loader;
+using NetherGate.API.Configuration;
+using NetherGate.API.Events;
+using NetherGate.API.Logging;
+using NetherGate.API.Plugins;
+using NetherGate.Core.Commands;
+using NetherGate.Core.Configuration;
+using NetherGate.Core.Events;
+using NetherGate.Core.Logging;
+using NetherGate.Core.Plugins;
+using NetherGate.Core.Protocol;
+
+namespace NetherGate.Host;
+
+class Program
+{
+    private static NetherGateConfig? _config;
+    private static ILogger? _logger;
+    private static ILoggerFactory? _loggerFactory;
+    private static IEventBus? _eventBus;
+    private static ICommandManager? _commandManager;
+    private static PluginManager? _pluginManager;
+    private static SmpClient? _smpClient;
+
+    static async Task<int> Main(string[] args)
+    {
+        // 注册 lib 文件夹的程序集解析器（必须在最开始）
+        RegisterLibAssemblyResolver();
+        
+        var startTime = DateTime.Now;
+        
+        try
+        {
+            // 显示欢迎信息
+            PrintBanner();
+
+            Console.WriteLine("[NetherGate] 正在启动...");
+            Console.WriteLine($"[NetherGate] 版本: 0.1.0-alpha");
+            Console.WriteLine($"[NetherGate] .NET 版本: {Environment.Version}");
+            Console.WriteLine();
+
+            // 1. 加载配置
+            Console.WriteLine("[NetherGate] [1/7] 加载配置...");
+            _config = ConfigurationLoader.Load();
+
+            // 2. 初始化日志系统
+            Console.WriteLine("[NetherGate] [2/7] 初始化日志系统...");
+            _loggerFactory = InitializeLogging(_config.Logging);
+            _logger = _loggerFactory.CreateLogger("NetherGate");
+
+            _logger.Info("NetherGate 正在启动...");
+            _logger.Info($"版本: 0.1.0-alpha");
+            _logger.Info($".NET 版本: {Environment.Version}");
+
+            // 3. 初始化事件总线
+            _logger.Info("[3/7] 初始化事件总线...");
+            _eventBus = InitializeEventBus();
+
+            // 4. 初始化目录结构
+            _logger.Info("[4/7] 初始化目录结构...");
+            InitializeDirectories(_config);
+
+            // 5. 初始化命令系统
+            _logger.Info("[5/7] 初始化命令系统...");
+            _commandManager = InitializeCommandManager();
+
+            // 6. 初始化 SMP 客户端
+            _logger.Info("[6/7] 初始化 SMP 客户端...");
+            _smpClient = InitializeSmpClient(_config);
+
+            // 7. 显示配置摘要
+            _logger.Info("[7/7] 配置摘要:");
+            DisplayConfigSummary(_config);
+
+            _logger.Info("========================================");
+            _logger.Info("NetherGate 基础框架启动完成");
+            _logger.Info("========================================");
+
+            // 测试 SMP 连接（如果配置启用）
+            if (_config.ServerConnection.AutoConnect)
+            {
+                _logger.Info("");
+                _logger.Info("连接到 SMP 服务器...");
+                await ConnectSmpAsync();
+            }
+
+            // 加载插件
+            _logger.Info("");
+            await LoadPluginsAsync();
+
+            // 计算启动耗时
+            var elapsedMs = (DateTime.Now - startTime).TotalMilliseconds;
+            _logger.Info("");
+            _logger.Info($"NetherGate 启动完毕（耗时: {elapsedMs:F0} 毫秒），输入 'help' 查看可用命令");
+
+            // 启动命令循环
+            await RunCommandLoopAsync();
+
+            _logger.Info("NetherGate 正在关闭...");
+            
+            // 清理资源
+            await ShutdownAsync();
+
+            _logger.Info("已安全退出");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[NetherGate] 启动失败: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// 打印欢迎横幅
+    /// </summary>
+    static void PrintBanner()
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine(@"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║                                                           ║
+    ║           _   _      _   _                ____            ║
+    ║          | \ | | ___| |_| |__   ___ _ __ / ___|__ _      ║
+    ║          |  \| |/ _ \ __| '_ \ / _ \ '__| |  _/ _` |     ║
+    ║          | |\  |  __/ |_| | | |  __/ |  | |_| (_| |     ║
+    ║          |_| \_|\___|\__|_| |_|\___|_|   \____\__,_|     ║
+    ║                                                           ║
+    ║        Minecraft Server Plugin Loader for .NET            ║
+    ║                                                           ║
+    ╚═══════════════════════════════════════════════════════════╝
+");
+        Console.ResetColor();
+    }
+
+    /// <summary>
+    /// 初始化日志系统
+    /// </summary>
+    static ILoggerFactory InitializeLogging(LoggingConfig config)
+    {
+        var writers = new List<ILogWriter>();
+
+        // 解析日志级别
+        var minLevel = Enum.TryParse<LogLevel>(config.Level, true, out var level)
+            ? level
+            : LogLevel.Info;
+
+        // 控制台日志
+        if (config.Console.Enabled)
+        {
+            writers.Add(new ConsoleLogWriter(config.Console.Colored));
+        }
+
+        // 文件日志
+        if (config.File.Enabled)
+        {
+            writers.Add(new FileLogWriter(
+                config.File.Path,
+                config.File.MaxSize,
+                config.File.MaxFiles
+            ));
+        }
+
+        return new LoggerFactory(minLevel, writers);
+    }
+
+    /// <summary>
+    /// 初始化事件总线
+    /// </summary>
+    static IEventBus InitializeEventBus()
+    {
+        var eventBus = new EventBus(_loggerFactory!.CreateLogger("EventBus"));
+
+        // 订阅一些测试事件
+        eventBus.Subscribe<SmpConnectedEvent>(OnSmpConnected);
+        eventBus.Subscribe<SmpDisconnectedEvent>(OnSmpDisconnected);
+
+        _logger?.Debug("事件总线初始化完成");
+        return eventBus;
+    }
+
+    /// <summary>
+    /// 初始化命令管理器
+    /// </summary>
+    static ICommandManager InitializeCommandManager()
+    {
+        var commandManager = new CommandManager(_loggerFactory!.CreateLogger("CommandManager"));
+
+        // 注册内置命令
+        RegisterBuiltinCommands(commandManager);
+
+        _logger?.Debug("命令系统初始化完成");
+        return commandManager;
+    }
+
+    /// <summary>
+    /// 初始化 SMP 客户端
+    /// </summary>
+    static SmpClient InitializeSmpClient(NetherGateConfig config)
+    {
+        var smpLogger = _loggerFactory!.CreateLogger("SMP");
+        var smpClient = new SmpClient(config.ServerConnection, smpLogger, _eventBus);
+
+        _logger?.Debug("SMP 客户端初始化完成");
+        return smpClient;
+    }
+
+    /// <summary>
+    /// 初始化目录结构
+    /// </summary>
+    static void InitializeDirectories(NetherGateConfig config)
+    {
+        // 创建插件目录
+        if (!Directory.Exists(config.Plugins.Directory))
+        {
+            Directory.CreateDirectory(config.Plugins.Directory);
+            _logger?.Info($"创建插件目录: {config.Plugins.Directory}");
+        }
+
+        // 创建插件配置目录
+        const string configDir = "config";
+        if (!Directory.Exists(configDir))
+        {
+            Directory.CreateDirectory(configDir);
+            _logger?.Info($"创建插件配置目录: {configDir}");
+        }
+
+        // 创建全局库目录
+        const string libDir = "lib";
+        if (!Directory.Exists(libDir))
+        {
+            Directory.CreateDirectory(libDir);
+            _logger?.Info($"创建全局库目录: {libDir}");
+        }
+
+        // 创建日志目录
+        var logDir = Path.GetDirectoryName(config.Logging.File.Path);
+        if (!string.IsNullOrEmpty(logDir) && !Directory.Exists(logDir))
+        {
+            Directory.CreateDirectory(logDir);
+            _logger?.Info($"创建日志目录: {logDir}");
+        }
+
+        // 创建服务器工作目录（如果启用进程管理）
+        if (config.ServerProcess.Enabled && !Directory.Exists(config.ServerProcess.Server.WorkingDirectory))
+        {
+            _logger?.Warning($"服务器工作目录不存在: {config.ServerProcess.Server.WorkingDirectory}");
+            _logger?.Warning("请确保 Minecraft 服务器已正确配置");
+        }
+    }
+
+    /// <summary>
+    /// 显示配置摘要
+    /// </summary>
+    static void DisplayConfigSummary(NetherGateConfig config)
+    {
+        _logger?.Info($"  服务器进程管理: {(config.ServerProcess.Enabled ? "[启用]" : "[禁用]")}");
+        
+        if (config.ServerProcess.Enabled)
+        {
+            _logger?.Info($"    - Java: {config.ServerProcess.Java.Path}");
+            _logger?.Info($"    - JAR: {config.ServerProcess.Server.Jar}");
+            _logger?.Info($"    - 内存: {config.ServerProcess.Memory.Min}MB - {config.ServerProcess.Memory.Max}MB");
+        }
+
+        _logger?.Info($"  SMP 连接: {config.ServerConnection.Host}:{config.ServerConnection.Port}");
+        _logger?.Info($"    - TLS: {(config.ServerConnection.UseTls ? "启用" : "禁用")}");
+        _logger?.Info($"    - 自动连接: {(config.ServerConnection.AutoConnect ? "是" : "否")}");
+
+        _logger?.Info($"  RCON 客户端: {(config.Rcon.Enabled ? "[启用]" : "[禁用]")}");
+        if (config.Rcon.Enabled)
+        {
+            _logger?.Info($"    - 端口: {config.Rcon.Port}");
+            _logger?.Info($"    - 自动连接: {(config.Rcon.AutoConnect ? "是" : "否")}");
+        }
+
+        _logger?.Info($"  日志监听器: {(config.LogListener.Enabled ? "[启用]" : "[禁用]")}");
+        _logger?.Info($"  插件目录: {config.Plugins.Directory}");
+        _logger?.Info($"  日志级别: {config.Logging.Level}");
+    }
+
+    /// <summary>
+    /// 注册内置命令
+    /// </summary>
+    static void RegisterBuiltinCommands(ICommandManager commandManager)
+    {
+        // Help 命令
+        commandManager.RegisterCommand(new HelpCommand(commandManager));
+        
+        // Version 命令
+        commandManager.RegisterCommand(new VersionCommand());
+        
+        // Stop 命令
+        commandManager.RegisterCommand(new StopCommand());
+        
+        _logger?.Debug("内置命令注册完成");
+    }
+
+    /// <summary>
+    /// 连接到 SMP 服务器
+    /// </summary>
+    static async Task ConnectSmpAsync()
+    {
+        if (_smpClient == null)
+        {
+            _logger?.Error("SMP 客户端未初始化");
+            return;
+        }
+
+        try
+        {
+            _logger?.Info($"尝试连接到 {_config!.ServerConnection.Host}:{_config.ServerConnection.Port}");
+            _logger?.Info("注意: 需要 Minecraft 服务器运行并启用 SMP");
+            
+            var connected = await _smpClient.ConnectAsync();
+
+            if (connected)
+            {
+                _logger?.Info("SMP 连接成功");
+            }
+            else
+            {
+                _logger?.Warning("SMP 连接失败（这是正常的，如果服务器未运行）");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.Warning($"SMP 连接失败: {ex.Message}");
+            _logger?.Info("这是正常的，因为 Minecraft 服务器可能未运行");
+        }
+    }
+
+    /// <summary>
+    /// 加载插件
+    /// </summary>
+    static async Task LoadPluginsAsync()
+    {
+        try
+        {
+            // 初始化插件管理器
+            _pluginManager = new PluginManager(
+                _loggerFactory!,
+                _eventBus!,
+                _smpClient!,
+                _commandManager!,
+                _config!.Plugins.Directory,
+                "config"
+            );
+
+            // 加载所有插件
+            await _pluginManager.LoadAllPluginsAsync();
+
+            // 注册需要 PluginManager 的内置命令
+            _commandManager!.RegisterCommand(new PluginsCommand(_pluginManager));
+            
+            // 注册需要 SMP API 的内置命令
+            var statusLogger = _loggerFactory!.CreateLogger("StatusCommand");
+            _commandManager.RegisterCommand(new StatusCommand(_smpClient!, statusLogger));
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error("加载插件时发生错误", ex);
+        }
+    }
+
+    /// <summary>
+    /// 运行命令循环
+    /// </summary>
+    static async Task RunCommandLoopAsync()
+    {
+        var running = true;
+
+        // 处理 Ctrl+C
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true;
+            running = false;
+        };
+
+        while (running)
+        {
+            try
+            {
+                // 读取用户输入
+                Console.Write("> ");
+                var input = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(input))
+                    continue;
+
+                // 处理 stop 命令
+                if (input.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                // 执行命令
+                var result = await _commandManager!.ExecuteCommandAsync(input);
+
+                // 显示结果
+                if (result.Success)
+                {
+                    if (!string.IsNullOrEmpty(result.Message))
+                    {
+                        _logger?.Info(result.Message);
+                    }
+                }
+                else
+                {
+                    _logger?.Error(result.Error ?? "命令执行失败");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error("命令执行时发生异常", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 关闭并清理资源
+    /// </summary>
+    static async Task ShutdownAsync()
+    {
+        // 1. 卸载插件
+        if (_pluginManager != null)
+        {
+            _logger?.Info("卸载插件...");
+            await _pluginManager.UnloadAllPluginsAsync();
+        }
+
+        // 2. 断开 SMP 连接
+        if (_smpClient != null)
+        {
+            _logger?.Info("断开 SMP 连接...");
+            await _smpClient.DisconnectAsync();
+            _smpClient.Dispose();
+        }
+
+        // 3. 清理事件总线
+        if (_eventBus != null)
+        {
+            _eventBus.ClearAllSubscriptions();
+        }
+    }
+
+    // ========== 事件处理 ==========
+
+    /// <summary>
+    /// SMP 连接成功事件
+    /// </summary>
+    static void OnSmpConnected(SmpConnectedEvent @event)
+    {
+        _logger?.Info($"[事件] SMP 连接已建立 ({@event.Timestamp:HH:mm:ss})");
+    }
+
+    /// <summary>
+    /// SMP 连接断开事件
+    /// </summary>
+    static void OnSmpDisconnected(SmpDisconnectedEvent @event)
+    {
+        var reason = string.IsNullOrEmpty(@event.Reason) ? "未知原因" : @event.Reason;
+        _logger?.Warning($"[事件] SMP 连接已断开 ({@event.Timestamp:HH:mm:ss}) - {reason}");
+    }
+
+    /// <summary>
+    /// 注册 lib 文件夹的程序集解析器
+    /// </summary>
+    static void RegisterLibAssemblyResolver()
+    {
+        // 获取程序所在目录
+        var baseDirectory = AppContext.BaseDirectory;
+        var libDirectory = Path.Combine(baseDirectory, "lib");
+
+        // 如果 lib 目录不存在，直接返回
+        if (!Directory.Exists(libDirectory))
+        {
+            return;
+        }
+
+        // 注册程序集解析事件
+        AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
+        {
+            // 尝试从 lib 文件夹加载程序集
+            var assemblyPath = Path.Combine(libDirectory, $"{assemblyName.Name}.dll");
+
+            if (File.Exists(assemblyPath))
+            {
+                try
+                {
+                    return context.LoadFromAssemblyPath(assemblyPath);
+                }
+                catch
+                {
+                    // 加载失败，返回 null 让默认加载器处理
+                    return null;
+                }
+            }
+
+            return null;
+        };
+    }
+}

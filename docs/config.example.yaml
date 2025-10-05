@@ -1,0 +1,94 @@
+# NetherGate 插件配置示例文件 (YAML 格式)
+# 这是一个示例文件，展示如何使用 YAML 格式编写插件配置
+
+# 基本配置示例
+enabled: true
+debug_mode: false
+
+# 字符串配置
+message: "Hello, Minecraft!"
+prefix: "[MyPlugin]"
+
+# 数字配置
+max_players: 100
+timeout: 30
+port: 25565
+
+# 列表配置
+allowed_commands:
+  - tp
+  - give
+  - gamemode
+
+blocked_items:
+  - tnt
+  - bedrock
+  - command_block
+
+# 嵌套对象配置
+database:
+  host: localhost
+  port: 3306
+  username: minecraft
+  password: your_password_here
+  database_name: minecraft_db
+
+# 复杂嵌套结构
+features:
+  teleport:
+    enabled: true
+    cooldown: 10
+    max_distance: 1000
+  
+  chat:
+    enabled: true
+    format: "&7[{level}] &b{player}&f: {message}"
+    max_length: 256
+  
+  economy:
+    enabled: false
+    starting_balance: 1000
+    currency_symbol: "$"
+
+# 权限配置
+permissions:
+  admin:
+    - "myplugin.admin"
+    - "myplugin.manage"
+  
+  moderator:
+    - "myplugin.moderate"
+    - "myplugin.kick"
+  
+  player:
+    - "myplugin.use"
+
+# 时间配置（秒）
+intervals:
+  auto_save: 300      # 5分钟
+  backup: 3600        # 1小时
+  cleanup: 86400      # 24小时
+
+# 布尔值配置
+settings:
+  auto_backup: true
+  send_notifications: true
+  enable_metrics: false
+  use_cache: true
+
+# 注释说明
+# YAML 支持注释，可以使用 # 符号
+# 相比 JSON 更加人类可读
+# 支持多行文本、引用等高级特性
+
+# 多行文本示例
+welcome_message: |
+  欢迎来到我们的服务器！
+  这是一个多行消息。
+  请遵守服务器规则，祝游戏愉快！
+
+# 单行文本（自动折行）
+description: >
+  这是一个很长的描述文本，
+  它会被自动折叠成单行，
+  但在 YAML 文件中可以分多行书写以提高可读性。

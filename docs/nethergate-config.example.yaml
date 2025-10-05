@@ -1,0 +1,174 @@
+# NetherGate 配置文件 (YAML 格式)
+# 这是完整的配置示例，展示所有可用选项
+
+# ============================================
+# 服务器进程管理配置
+# ============================================
+server_process:
+  enabled: true
+  launch_method: "java"  # java | script | external
+  
+  # Java 配置（当 launch_method=java 时使用）
+  java:
+    path: "java"
+    version_check: true
+  
+  # 服务器 JAR 配置
+  server:
+    jar: "server.jar"
+    working_directory: "./minecraft_server"
+  
+  # 内存配置（单位：MB）
+  memory:
+    min: 2048
+    max: 4096
+  
+  # JVM 参数
+  arguments:
+    jvm_middle:
+      - "-XX:+UseG1GC"
+      - "-XX:MaxGCPauseMillis=200"
+      - "-Dfile.encoding=UTF-8"
+    server:
+      - "--nogui"
+  
+  # 脚本启动配置（当 launch_method=script 时使用）
+  script:
+    path: "./start.sh"
+    working_directory: "./minecraft_server"
+    use_shell: false
+
+# ============================================
+# SMP 服务器连接配置
+# ============================================
+server_connection:
+  host: "localhost"
+  port: 40745
+  secret: "your-40-character-secret-token-here-change-this"  # 修改为实际密钥
+  use_tls: false
+  tls_certificate: null
+  tls_password: null
+  reconnect_interval: 5000
+  heartbeat_timeout: 30000
+  auto_connect: true
+  connect_delay: 3000
+  wait_for_server_ready: true
+
+# ============================================
+# RCON 客户端配置
+# ============================================
+rcon:
+  enabled: true
+  host: "localhost"
+  port: 25566
+  password: "your-rcon-password-change-this"  # 修改为实际密码
+  timeout: 5000
+  auto_connect: true
+  retry_interval: 5000
+  max_retries: 3
+
+# ============================================
+# 性能监控配置 (spark)
+# ============================================
+spark:
+  enabled: true
+  type: "plugin"  # plugin | standalone
+  
+  # Plugin 模式配置
+  plugin:
+    auto_install: false
+    version: "latest"
+  
+  # Standalone 模式配置
+  standalone:
+    jar_path: "./spark-standalone.jar"
+    host: "localhost"
+    port: 4567
+
+# ============================================
+# 日志监听器配置
+# ============================================
+log_listener:
+  enabled: true
+  
+  parsing:
+    parse_chat: true
+    parse_commands: true
+    parse_player_events: true
+    parse_errors: true
+  
+  filters:
+    ignore_patterns:
+      - "Can't keep up!"
+      - "moved too quickly!"
+      - "moved wrongly!"
+    log_levels:
+      - "INFO"
+      - "WARN"
+      - "ERROR"
+  
+  buffer:
+    size: 1000
+    drop_old: true
+
+# ============================================
+# 插件管理配置
+# ============================================
+plugins:
+  directory: "plugins"
+  auto_load: true
+  hot_reload: true
+  enabled_plugins:
+    - "*"  # "*" 表示启用所有插件
+  disabled_plugins: []
+  load_after_server_ready: true
+  load_timeout: 30
+
+# ============================================
+# 日志系统配置
+# ============================================
+logging:
+  level: "Info"  # Trace | Debug | Info | Warning | Error | Fatal
+  
+  # 控制台日志
+  console:
+    enabled: true
+    colored: true
+    show_server_output: true
+    server_output_prefix: "[MC] "
+  
+  # 文件日志
+  file:
+    enabled: true
+    path: "logs/latest.log"
+    max_size: 10485760  # 10MB
+    max_files: 10
+    rolling: true
+    encoding: "UTF-8"
+  
+  # 高级日志选项
+  advanced:
+    log_plugin_loading: true
+    log_smp_communication: false
+    log_rcon_communication: false
+    log_performance: false
+
+# ============================================
+# 高级配置
+# ============================================
+advanced:
+  # 性能监控
+  performance:
+    enabled: false
+    report_interval: 60
+  
+  # 安全选项
+  security:
+    hide_secrets_in_logs: true
+    plugin_sandbox: false
+  
+  # 实验性功能
+  experimental:
+    enabled: false
+    hot_reload: false
+    web_interface: false

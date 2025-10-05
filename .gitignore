@@ -1,0 +1,114 @@
+# .NET Build outputs
+bin/
+obj/
+out/
+publish/
+
+# Visual Studio / Rider
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Test Results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+
+# Runtime directories (自动生成，不提交到仓库)
+config/                 # 配置文件目录（运行时生成）
+plugins/                # 插件目录（运行时生成）
+logs/                   # 日志目录（运行时生成）
+lib/                    # 全局依赖库目录（运行时生成）
+shared-libs/            # 共享依赖库目录（如果使用，已废弃）
+
+# 保留配置模板（例外规则）
+!config.example.json
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Mono Auto Generated Files
+mono_crash.*
+
+# Windows Installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# SQLite databases (如果有测试数据库)
+*.db
+*.db-shm
+*.db-wal
+
+# Minecraft Server files (如果用于测试)
+minecraft_server/
+server.jar
+eula.txt
+server.properties
+banned-*.json
+ops.json
+whitelist.json
+usercache.json
+world/
+world_nether/
+world_the_end/
+

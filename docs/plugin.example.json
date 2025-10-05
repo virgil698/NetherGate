@@ -1,0 +1,52 @@
+{
+  "id": "com.example.myplugin",
+  "name": "Example Plugin",
+  "version": "1.0.0",
+  "description": "一个示例插件，展示如何声明依赖",
+  "author": "Your Name",
+  "website": "https://example.com",
+  "license": "MIT",
+  
+  "main": "ExamplePlugin.ExamplePluginMain",
+  
+  "dependencies": [],
+  "soft_dependencies": [],
+  
+  "library_dependencies": [
+    {
+      "name": "Newtonsoft.Json",
+      "version": "13.0.3",
+      "location": "lib",
+      "optional": false
+    },
+    {
+      "name": "Serilog",
+      "version": ">=3.0.0",
+      "location": "lib",
+      "optional": true
+    },
+    {
+      "name": "MySql.Data",
+      "version": "8.0.33",
+      "location": "auto",
+      "optional": false
+    },
+    {
+      "name": "PrivateLibrary",
+      "location": "local",
+      "optional": false
+    }
+  ],
+  
+  "load_order": 100,
+  "nethergate_version": ">=0.1.0",
+  "minecraft_version": ">=1.21.9",
+  "target_framework": "net9.0",
+  
+  "tags": ["example", "demo", "dependencies"],
+  
+  "properties": {
+    "custom_property": "custom_value"
+  }
+}
+

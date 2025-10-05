@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetherGate.API\NetherGate.API.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="fNbt" Version="1.0.0" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="9.0.9" />
+    <PackageReference Include="YamlDotNet" Version="16.2.1" />
+    <PackageReference Include="NuGet.Protocol" Version="6.11.1" />
+    <PackageReference Include="NuGet.Packaging" Version="6.11.1" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

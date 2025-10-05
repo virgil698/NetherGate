@@ -1,0 +1,52 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetherGate.Core\NetherGate.Core.csproj" />
+    <ProjectReference Include="..\NetherGate.API\NetherGate.API.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    
+    <!-- 启用运行时依赖复制 -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <!-- 发布后将依赖移动到 lib 文件夹 -->
+  <Target Name="MoveRuntimeDependenciesToLib" AfterTargets="Publish">
+    <ItemGroup>
+      <!-- 获取所有依赖 DLL（排除主程序集和 API/Core） -->
+      <DependencyFiles Include="$(PublishDir)*.dll" 
+                       Exclude="$(PublishDir)NetherGate.Host.dll;$(PublishDir)NetherGate.API.dll;$(PublishDir)NetherGate.Core.dll" />
+    </ItemGroup>
+    
+    <!-- 创建 lib 目录 -->
+    <MakeDir Directories="$(PublishDir)lib" />
+    
+    <!-- 移动依赖到 lib -->
+    <Move SourceFiles="@(DependencyFiles)" DestinationFolder="$(PublishDir)lib" />
+    
+    <Message Text="已将运行时依赖移动到 lib 文件夹" Importance="high" />
+  </Target>
+
+  <!-- 构建后将依赖移动到 lib 文件夹（用于开发调试） -->
+  <Target Name="MoveDebugDependenciesToLib" AfterTargets="Build">
+    <ItemGroup>
+      <!-- 获取所有依赖 DLL（排除主程序集和 API/Core） -->
+      <DebugDependencyFiles Include="$(OutputPath)*.dll" 
+                            Exclude="$(OutputPath)NetherGate.Host.dll;$(OutputPath)NetherGate.API.dll;$(OutputPath)NetherGate.Core.dll" />
+    </ItemGroup>
+    
+    <!-- 创建 lib 目录 -->
+    <MakeDir Directories="$(OutputPath)lib" />
+    
+    <!-- 移动依赖到 lib -->
+    <Move SourceFiles="@(DebugDependencyFiles)" DestinationFolder="$(OutputPath)lib" />
+    
+    <Message Text="已将调试依赖移动到 lib 文件夹" Importance="high" />
+  </Target>
+
+</Project>
