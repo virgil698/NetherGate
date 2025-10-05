@@ -1,0 +1,240 @@
+name: Nightly Release
+
+on:
+  schedule:
+    # 北京时间每晚 20:00 (UTC 12:00)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 允许手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  check-commits:
+    name: Check Daily Commits
+    runs-on: ubuntu-latest
+    outputs:
+      has_commits: ${{ steps.check.outputs.has_commits }}
+      commit_count: ${{ steps.check.outputs.commit_count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for commits today
+        id: check
+        run: |
+          # 获取北京时间今天的日期
+          TODAY=$(TZ='Asia/Shanghai' date '+%Y-%m-%d')
+          echo "检查日期: $TODAY"
+          
+          # 获取今天的提交数量（北京时间）
+          COMMIT_COUNT=$(git log --since="$TODAY 00:00:00 +0800" --until="$TODAY 23:59:59 +0800" --oneline | wc -l)
+          echo "今日提交数: $COMMIT_COUNT"
+          
+          if [ "$COMMIT_COUNT" -gt 0 ]; then
+            echo "has_commits=true" >> $GITHUB_OUTPUT
+            echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+            echo "✅ 发现 $COMMIT_COUNT 个提交，将进行构建"
+          else
+            echo "has_commits=false" >> $GITHUB_OUTPUT
+            echo "commit_count=0" >> $GITHUB_OUTPUT
+            echo "⏭️ 今日无提交，跳过构建"
+          fi
+
+  build:
+    name: Build for ${{ matrix.os }}
+    needs: check-commits
+    if: needs.check-commits.outputs.has_commits == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win-x64
+            artifact_name: nethergate-nightly-win-x64
+            binary_ext: .exe
+          - os: ubuntu-latest
+            platform: linux-x64
+            artifact_name: nethergate-nightly-linux-x64
+            binary_ext: ''
+          - os: macos-latest
+            platform: osx-x64
+            artifact_name: nethergate-nightly-osx-x64
+            binary_ext: ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: |
+          dotnet publish src/NetherGate.Host/NetherGate.Host.csproj \
+            -c Release \
+            -r ${{ matrix.platform }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./publish/${{ matrix.platform }}
+
+      - name: Create archive (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd ./publish/${{ matrix.platform }}
+          chmod +x NetherGate.Host${{ matrix.binary_ext }}
+          tar -czf ../../${{ matrix.artifact_name }}.tar.gz *
+          cd ../..
+          
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd ./publish/${{ matrix.platform }}
+          Compress-Archive -Path * -DestinationPath ../../${{ matrix.artifact_name }}.zip
+          cd ../..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ${{ matrix.artifact_name }}.tar.gz
+            ${{ matrix.artifact_name }}.zip
+          retention-days: 7
+
+  create-release:
+    name: Create Nightly Release
+    needs: [check-commits, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # 获取北京时间今天的日期
+          TODAY=$(TZ='Asia/Shanghai' date '+%Y-%m-%d')
+          DATETIME=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+          
+          # 创建发布说明
+          cat > release_notes.md << EOF
+          > ⚠️ **This is a nightly release.**
+          > ⚠️ **This is not the latest stable version.**
+          
+          ## 📅 构建信息
+          
+          - **构建日期**: $DATETIME (北京时间)
+          - **提交数量**: ${{ needs.check-commits.outputs.commit_count }}
+          - **分支**: \`${GITHUB_REF#refs/heads/}\`
+          - **提交**: \`${GITHUB_SHA:0:7}\`
+          
+          ---
+          
+          ## 📝 今日提交记录
+          
+          EOF
+          
+          # 添加今日所有提交
+          git log --since="$TODAY 00:00:00 +0800" \
+                  --until="$TODAY 23:59:59 +0800" \
+                  --pretty=format:"- \`%h\` %s - *%an*" >> release_notes.md
+          
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "---" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 📦 下载说明" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "请根据您的操作系统选择相应的压缩包：" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **Windows**: \`nethergate-nightly-win-x64.zip\`" >> release_notes.md
+          echo "- **Linux**: \`nethergate-nightly-linux-x64.tar.gz\`" >> release_notes.md
+          echo "- **macOS**: \`nethergate-nightly-osx-x64.tar.gz\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "解压后运行 \`NetherGate.Host\` 即可。" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "---" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## ⚙️ 系统要求" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **.NET Runtime**: 已包含在构建中（self-contained）" >> release_notes.md
+          echo "- **Minecraft**: Java Edition 1.20.x - 1.21.x" >> release_notes.md
+          echo "- **操作系统**: Windows 10+, Linux (Ubuntu 20.04+), macOS 11+" >> release_notes.md
+          
+          # 设置 release tag
+          RELEASE_TAG="nightly-$(TZ='Asia/Shanghai' date '+%Y%m%d')"
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "release_name=Nightly Release $(TZ='Asia/Shanghai' date '+%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Delete old nightly releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 保留最近 7 天的 nightly 版本，删除更早的
+          CUTOFF_DATE=$(date -d '7 days ago' '+%Y%m%d' 2>/dev/null || date -v-7d '+%Y%m%d')
+          
+          # 获取所有 nightly 标签
+          gh release list --limit 100 | grep "nightly-" | while read -r line; do
+            TAG=$(echo "$line" | awk '{print $1}')
+            TAG_DATE=$(echo "$TAG" | sed 's/nightly-//')
+            
+            if [ "$TAG_DATE" -lt "$CUTOFF_DATE" ]; then
+              echo "删除旧版本: $TAG"
+              gh release delete "$TAG" --yes --cleanup-tag || true
+            fi
+          done
+
+      - name: Organize artifacts
+        run: |
+          mkdir -p release_files
+          find ./artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} ./release_files/ \;
+          ls -lh ./release_files/
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 删除同名 release（如果存在）
+          gh release delete "${{ steps.release_notes.outputs.release_tag }}" --yes --cleanup-tag || true
+          
+          # 创建新的 release
+          gh release create "${{ steps.release_notes.outputs.release_tag }}" \
+            --title "${{ steps.release_notes.outputs.release_name }}" \
+            --notes-file release_notes.md \
+            --prerelease \
+            --target "${GITHUB_SHA}" \
+            ./release_files/*
+
+  notify:
+    name: Notify Build Status
+    needs: [check-commits, build, create-release]
+    if: always() && needs.check-commits.outputs.has_commits == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.build.result }}" == "success" ] && [ "${{ needs.create-release.result }}" == "success" ]; then
+            echo "✅ Nightly 构建成功！"
+            echo "📦 已发布到 GitHub Releases"
+          else
+            echo "❌ Nightly 构建失败"
+            exit 1
+          fi
+
