@@ -10,6 +10,7 @@ using NetherGate.Core.Events;
 using NetherGate.Core.Logging;
 using NetherGate.Core.Plugins;
 using NetherGate.Core.Protocol;
+using NetherGate.Host.Cli;
 
 namespace NetherGate.Host;
 
@@ -28,6 +29,15 @@ class Program
         // 注册 lib 文件夹的程序集解析器（必须在最开始）
         RegisterLibAssemblyResolver();
         
+        // 解析 CLI 参数
+        var cliArgs = CliArgumentParser.Parse(args);
+        
+        // 处理 CLI 命令（非交互模式）
+        if (!cliArgs.IsInteractive)
+        {
+            return await CliCommandHandler.ExecuteAsync(cliArgs);
+        }
+        
         var startTime = DateTime.Now;
         
         try
@@ -42,6 +52,36 @@ class Program
 
             // 1. 加载配置
             Console.WriteLine("[NetherGate] [1/7] 加载配置...");
+            
+            // 检查配置文件是否存在
+            var configPath = ConfigurationLoader.GetConfigPath();
+            if (!File.Exists(configPath))
+            {
+                Console.WriteLine();
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("⚠ 未找到配置文件！");
+                Console.ResetColor();
+                Console.WriteLine();
+                
+                if (AskYesNo("是否运行配置向导？", defaultYes: true))
+                {
+                    Console.WriteLine();
+                    var wizardResult = await ConfigurationWizard.RunAsync();
+                    
+                    if (wizardResult != 0)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("配置向导未完成。正在使用默认配置启动...");
+                        Console.WriteLine();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("正在使用默认配置启动...");
+                    Console.WriteLine();
+                }
+            }
+            
             _config = ConfigurationLoader.Load();
 
             // 2. 初始化日志系统
@@ -120,19 +160,21 @@ class Program
     {
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine(@"
-    ╔═══════════════════════════════════════════════════════════╗
-    ║                                                           ║
-    ║           _   _      _   _                ____            ║
-    ║          | \ | | ___| |_| |__   ___ _ __ / ___|__ _      ║
-    ║          |  \| |/ _ \ __| '_ \ / _ \ '__| |  _/ _` |     ║
-    ║          | |\  |  __/ |_| | | |  __/ |  | |_| (_| |     ║
-    ║          |_| \_|\___|\__|_| |_|\___|_|   \____\__,_|     ║
-    ║                                                           ║
-    ║        Minecraft Server Plugin Loader for .NET            ║
-    ║                                                           ║
-    ╚═══════════════════════════════════════════════════════════╝
+    ███╗   ██╗███████╗████████╗██╗  ██╗███████╗██████╗  ██████╗  █████╗ ████████╗███████╗
+    ████╗  ██║██╔════╝╚══██╔══╝██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔══██╗╚══██╔══╝██╔════╝
+    ██╔██╗ ██║█████╗     ██║   ███████║█████╗  ██████╔╝██║  ███╗███████║   ██║   ███████╗
+    ██║╚██╗██║██╔══╝     ██║   ██╔══██║██╔══╝  ██╔══██╗██║   ██║██╔══██║   ██║   ╚════██║
+    ██║ ╚████║███████╗   ██║   ██║  ██║███████╗██║  ██║╚██████╔╝██║  ██║   ██║   ███████║
+    ╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝
 ");
+        Console.ForegroundColor = ConsoleColor.White;
+        Console.WriteLine("    ═══════════════════════════════════════════════════════════════════════════════");
+        Console.ForegroundColor = ConsoleColor.DarkCyan;
+        Console.WriteLine("                    🌐 Minecraft Server Plugin Loader for .NET 🌐");
+        Console.ForegroundColor = ConsoleColor.White;
+        Console.WriteLine("    ═══════════════════════════════════════════════════════════════════════════════");
         Console.ResetColor();
+        Console.WriteLine();
     }
 
     /// <summary>
@@ -501,5 +543,21 @@ class Program
 
             return null;
         };
+    }
+    
+    /// <summary>
+    /// 询问用户是或否
+    /// </summary>
+    static bool AskYesNo(string prompt, bool defaultYes = true)
+    {
+        var defaultText = defaultYes ? "Y/n" : "y/N";
+        Console.Write($"{prompt} [{defaultText}] ");
+        
+        var input = Console.ReadLine()?.Trim().ToLower();
+        
+        if (string.IsNullOrEmpty(input))
+            return defaultYes;
+        
+        return input == "y" || input == "yes";
     }
 }

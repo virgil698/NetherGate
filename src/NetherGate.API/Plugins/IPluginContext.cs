@@ -110,6 +110,12 @@ public interface IPluginContext
     IServerMonitor ServerMonitor { get; }
 
     /// <summary>
+    /// 插件消息传递器
+    /// 用于插件间通信
+    /// </summary>
+    IPluginMessenger Messenger { get; }
+
+    /// <summary>
     /// 获取其他插件
     /// </summary>
     /// <param name="pluginId">插件 ID</param>

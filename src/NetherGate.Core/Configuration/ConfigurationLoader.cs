@@ -15,6 +15,22 @@ public class ConfigurationLoader
     private const string ConfigFileNameJson = "nethergate-config.json";
 
     /// <summary>
+    /// 获取配置文件路径（如果存在）
+    /// </summary>
+    public static string GetConfigPath()
+    {
+        if (File.Exists(ConfigFileNameYaml))
+            return ConfigFileNameYaml;
+        if (File.Exists(ConfigFileNameYml))
+            return ConfigFileNameYml;
+        if (File.Exists(ConfigFileNameJson))
+            return ConfigFileNameJson;
+        
+        // 默认返回 YAML 路径（即使不存在）
+        return ConfigFileNameYaml;
+    }
+
+    /// <summary>
     /// 加载配置（支持 YAML 和 JSON 格式，优先使用 YAML）
     /// </summary>
     public static NetherGateConfig Load()

@@ -12,7 +12,7 @@ namespace NetherGate.Core.Plugins;
 /// <summary>
 /// 插件上下文实现
 /// </summary>
-public class PluginContext : IPluginContext
+internal class PluginContext : IPluginContext, IPluginContextInternal
 {
     private readonly PluginManager _pluginManager;
     private readonly ILogger _logger;
@@ -27,6 +27,7 @@ public class PluginContext : IPluginContext
     private readonly IPerformanceMonitor _performanceMonitor;
     private readonly IPlayerDataReader _playerDataReader;
     private readonly IWorldDataReader _worldDataReader;
+    private readonly PluginMessenger _messenger;
 
     public PluginInfo PluginInfo { get; }
     public string DataDirectory { get; }
@@ -44,10 +45,14 @@ public class PluginContext : IPluginContext
     public IPerformanceMonitor PerformanceMonitor => _performanceMonitor;
     public IPlayerDataReader PlayerDataReader => _playerDataReader;
     public IWorldDataReader WorldDataReader => _worldDataReader;
+    public IPluginMessenger Messenger => _messenger;
     
     // 待实现的功能
     public IServerQuery ServerQuery => throw new NotImplementedException("服务器查询功能将在后续版本实现（基于 MC 网络协议）");
     public IServerMonitor ServerMonitor => throw new NotImplementedException("服务器监控功能将在后续版本实现（基于 MC 网络协议）");
+    
+    // 内部接口实现（用于 PluginMessenger 访问）
+    PluginMessenger? IPluginContextInternal.Messenger => _messenger;
 
 
     public PluginContext(
@@ -85,6 +90,15 @@ public class PluginContext : IPluginContext
 
         // 为插件创建专用的配置管理器
         _configManager = new ConfigManager(container.DataDirectory, _logger);
+
+        // 为插件创建专用的消息传递器
+        _messenger = new PluginMessenger(
+            container.Metadata.Id,
+            _logger,
+            pluginManager.GetPlugin,
+            pluginManager.GetPluginState,
+            pluginManager.GetAllPlugins
+        );
     }
 
     public IPlugin? GetPlugin(string pluginId)

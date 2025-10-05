@@ -167,6 +167,12 @@ public class PlayerDataReader : IPlayerDataReader
             };
         }
 
+        // 解析装备
+        var armor = ParseArmor(root);
+
+        // 解析状态效果
+        var effects = ParseStatusEffects(root);
+
         data = new PlayerData
         {
             Uuid = data.Uuid,
@@ -179,14 +185,11 @@ public class PlayerDataReader : IPlayerDataReader
             Position = position,
             Inventory = root["Inventory"] is NbtList inventory ? ParseItemList(inventory) : data.Inventory,
             EnderChest = root["EnderItems"] is NbtList enderItems ? ParseItemList(enderItems) : data.EnderChest,
-            Armor = data.Armor,
-            Effects = data.Effects,
+            Armor = armor,
+            Effects = effects,
             LastPlayed = data.LastPlayed,
             IsOnline = data.IsOnline
         };
-
-        // 解析装备（目前简化处理）
-        // TODO: 完整实现装备解析
 
         return data;
     }
@@ -199,11 +202,39 @@ public class PlayerDataReader : IPlayerDataReader
         {
             try
             {
+                var enchantments = new List<Enchantment>();
+                string? customName = null;
+
+                // 解析物品 NBT 数据
+                if (itemTag["tag"] is NbtCompound tag)
+                {
+                    // 解析附魔
+                    if (tag["Enchantments"] is NbtList enchList)
+                    {
+                        foreach (var enchTag in enchList.OfType<NbtCompound>())
+                        {
+                            enchantments.Add(new Enchantment
+                            {
+                                Id = enchTag["id"]?.StringValue ?? "",
+                                Level = enchTag["lvl"]?.ShortValue ?? 1
+                            });
+                        }
+                    }
+
+                    // 解析自定义名称
+                    if (tag["display"] is NbtCompound display)
+                    {
+                        customName = display["Name"]?.StringValue;
+                    }
+                }
+
                 var item = new ItemStack
                 {
                     Id = itemTag["id"]?.StringValue ?? "minecraft:air",
                     Count = itemTag["Count"]?.ByteValue ?? 1,
-                    Slot = itemTag["Slot"]?.ByteValue ?? 0
+                    Slot = itemTag["Slot"]?.ByteValue ?? 0,
+                    Enchantments = enchantments,
+                    CustomName = customName
                 };
 
                 items.Add(item);
@@ -219,8 +250,6 @@ public class PlayerDataReader : IPlayerDataReader
 
     private PlayerStats ParsePlayerStats(string json, Guid playerUuid)
     {
-        // 简化实现 - 实际需要解析完整的 JSON 统计数据
-        // 参考: https://minecraft.fandom.com/wiki/Statistics
         var stats = new PlayerStats
         {
             Uuid = playerUuid
@@ -231,11 +260,91 @@ public class PlayerDataReader : IPlayerDataReader
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            if (root.TryGetProperty("stats", out var statsObj))
+            if (!root.TryGetProperty("stats", out var statsObj))
+                return stats;
+
+            var mobKills = new Dictionary<string, int>();
+            var blocksMined = new Dictionary<string, int>();
+            var itemsUsed = new Dictionary<string, int>();
+            var customStats = new Dictionary<string, int>();
+
+            int deaths = 0;
+            int jumps = 0;
+            double distanceWalked = 0;
+            double distanceFlown = 0;
+            int playTime = 0;
+
+            // 解析自定义统计
+            if (statsObj.TryGetProperty("minecraft:custom", out var customObj))
             {
-                // 解析统计数据
-                // TODO: 完整实现统计解析
+                foreach (var prop in customObj.EnumerateObject())
+                {
+                    var value = prop.Value.GetInt32();
+                    customStats[prop.Name] = value;
+
+                    // 提取常用统计
+                    switch (prop.Name)
+                    {
+                        case "minecraft:deaths":
+                            deaths = value;
+                            break;
+                        case "minecraft:jump":
+                            jumps = value;
+                            break;
+                        case "minecraft:walk_one_cm":
+                            distanceWalked = value / 100.0; // 转换为米
+                            break;
+                        case "minecraft:fly_one_cm":
+                            distanceFlown = value / 100.0;
+                            break;
+                        case "minecraft:play_time":
+                        case "minecraft:play_one_minute":
+                            playTime = value / 20 / 60; // ticks -> 分钟
+                            break;
+                    }
+                }
             }
+
+            // 解析击杀统计
+            if (statsObj.TryGetProperty("minecraft:killed", out var killedObj))
+            {
+                foreach (var prop in killedObj.EnumerateObject())
+                {
+                    mobKills[prop.Name] = prop.Value.GetInt32();
+                }
+            }
+
+            // 解析挖掘统计
+            if (statsObj.TryGetProperty("minecraft:mined", out var minedObj))
+            {
+                foreach (var prop in minedObj.EnumerateObject())
+                {
+                    blocksMined[prop.Name] = prop.Value.GetInt32();
+                }
+            }
+
+            // 解析使用物品统计
+            if (statsObj.TryGetProperty("minecraft:used", out var usedObj))
+            {
+                foreach (var prop in usedObj.EnumerateObject())
+                {
+                    itemsUsed[prop.Name] = prop.Value.GetInt32();
+                }
+            }
+
+            stats = new PlayerStats
+            {
+                Uuid = playerUuid,
+                PlayTimeMinutes = playTime,
+                MobKills = mobKills,
+                Deaths = deaths,
+                Jumps = jumps,
+                DistanceWalked = distanceWalked,
+                DistanceFlown = distanceFlown,
+                BlocksMined = blocksMined,
+                ItemsUsed = itemsUsed,
+                CustomStats = customStats
+            };
         }
         catch (Exception ex)
         {
@@ -247,25 +356,99 @@ public class PlayerDataReader : IPlayerDataReader
 
     private PlayerAdvancements ParsePlayerAdvancements(string json, Guid playerUuid)
     {
-        // 简化实现 - 实际需要解析完整的成就数据
-        var advancements = new PlayerAdvancements
-        {
-            Uuid = playerUuid
-        };
+        var completed = new List<CompletedAdvancement>();
+        var inProgress = new List<AdvancementProgress>();
 
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            // TODO: 完整实现成就解析
+            foreach (var advancement in root.EnumerateObject())
+            {
+                var advId = advancement.Name;
+                var advData = advancement.Value;
+
+                if (!advData.TryGetProperty("done", out var doneElement))
+                    continue;
+
+                bool isDone = doneElement.GetBoolean();
+
+                if (isDone)
+                {
+                    // 完全完成的成就
+                    DateTime completedAt = DateTime.MinValue;
+
+                    if (advData.TryGetProperty("done", out var doneTimeElement) && 
+                        doneTimeElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        // 尝试解析时间戳
+                        if (DateTime.TryParse(doneTimeElement.GetString(), out var parsedTime))
+                        {
+                            completedAt = parsedTime;
+                        }
+                    }
+                    else if (advData.TryGetProperty("criteria", out var criteriaObj))
+                    {
+                        // 从标准中获取最新完成时间
+                        foreach (var criterion in criteriaObj.EnumerateObject())
+                        {
+                            if (DateTime.TryParse(criterion.Value.GetString(), out var criterionTime))
+                            {
+                                if (criterionTime > completedAt)
+                                    completedAt = criterionTime;
+                            }
+                        }
+                    }
+
+                    completed.Add(new CompletedAdvancement
+                    {
+                        Id = advId,
+                        CompletedAt = completedAt
+                    });
+                }
+                else if (advData.TryGetProperty("criteria", out var criteriaObj))
+                {
+                    // 进行中的成就
+                    var completedCriteria = new List<string>();
+
+                    foreach (var criterion in criteriaObj.EnumerateObject())
+                    {
+                        completedCriteria.Add(criterion.Name);
+                    }
+
+                    if (completedCriteria.Count > 0)
+                    {
+                        inProgress.Add(new AdvancementProgress
+                        {
+                            Id = advId,
+                            CompletedCriteria = completedCriteria,
+                            TotalCriteria = completedCriteria.Count // 实际总数需要从成就定义中获取
+                        });
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
             _logger.Warning($"解析玩家成就失败: {ex.Message}");
         }
 
-        return advancements;
+        // 计算完成百分比（粗略估算）
+        double completionPercent = 0;
+        int totalAdvancements = completed.Count + inProgress.Count;
+        if (totalAdvancements > 0)
+        {
+            completionPercent = (double)completed.Count / totalAdvancements * 100;
+        }
+
+        return new PlayerAdvancements
+        {
+            Uuid = playerUuid,
+            Completed = completed,
+            InProgress = inProgress,
+            CompletionPercent = completionPercent
+        };
     }
 
     private string GetPlayerDataFilePath(Guid playerUuid)
@@ -281,6 +464,136 @@ public class PlayerDataReader : IPlayerDataReader
     private string GetPlayerAdvancementsFilePath(Guid playerUuid)
     {
         return Path.Combine(_serverDirectory, "world", "advancements", $"{playerUuid}.json");
+    }
+
+    private PlayerArmor ParseArmor(NbtCompound root)
+    {
+        PlayerArmor armor = new();
+
+        try
+        {
+            // 尝试从 ArmorItems 列表解析（较新版本）
+            if (root["ArmorItems"] is NbtList armorList && armorList.Count >= 4)
+            {
+                // ArmorItems 顺序: [feet, legs, chest, head]
+                var boots = armorList[0] as NbtCompound;
+                var leggings = armorList[1] as NbtCompound;
+                var chestplate = armorList[2] as NbtCompound;
+                var helmet = armorList[3] as NbtCompound;
+
+                armor = new PlayerArmor
+                {
+                    Helmet = ParseSingleItem(helmet),
+                    Chestplate = ParseSingleItem(chestplate),
+                    Leggings = ParseSingleItem(leggings),
+                    Boots = ParseSingleItem(boots)
+                };
+            }
+            // 尝试从 Inventory 中查找装备槽位（旧版本或备用方法）
+            else if (root["Inventory"] is NbtList inventory)
+            {
+                foreach (var itemTag in inventory.OfType<NbtCompound>())
+                {
+                    var slot = itemTag["Slot"]?.ByteValue ?? 0;
+                    
+                    // 装备槽位编号: 100=feet, 101=legs, 102=chest, 103=head
+                    var item = ParseSingleItem(itemTag);
+                    if (item == null) continue;
+
+                    armor = slot switch
+                    {
+                        100 => new PlayerArmor { Helmet = armor.Helmet, Chestplate = armor.Chestplate, Leggings = armor.Leggings, Boots = item },
+                        101 => new PlayerArmor { Helmet = armor.Helmet, Chestplate = armor.Chestplate, Leggings = item, Boots = armor.Boots },
+                        102 => new PlayerArmor { Helmet = armor.Helmet, Chestplate = item, Leggings = armor.Leggings, Boots = armor.Boots },
+                        103 => new PlayerArmor { Helmet = item, Chestplate = armor.Chestplate, Leggings = armor.Leggings, Boots = armor.Boots },
+                        _ => armor
+                    };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Trace($"解析装备失败: {ex.Message}");
+        }
+
+        return armor;
+    }
+
+    private ItemStack? ParseSingleItem(NbtCompound? itemTag)
+    {
+        if (itemTag == null) return null;
+
+        var id = itemTag["id"]?.StringValue;
+        if (string.IsNullOrEmpty(id) || id == "minecraft:air")
+            return null;
+
+        var enchantments = new List<Enchantment>();
+        string? customName = null;
+
+        // 解析物品 NBT 数据
+        if (itemTag["tag"] is NbtCompound tag)
+        {
+            // 解析附魔
+            if (tag["Enchantments"] is NbtList enchList)
+            {
+                foreach (var enchTag in enchList.OfType<NbtCompound>())
+                {
+                    enchantments.Add(new Enchantment
+                    {
+                        Id = enchTag["id"]?.StringValue ?? "",
+                        Level = enchTag["lvl"]?.ShortValue ?? 1
+                    });
+                }
+            }
+
+            // 解析自定义名称
+            if (tag["display"] is NbtCompound display)
+            {
+                customName = display["Name"]?.StringValue;
+            }
+        }
+
+        return new ItemStack
+        {
+            Id = id,
+            Count = itemTag["Count"]?.ByteValue ?? 1,
+            Slot = itemTag["Slot"]?.ByteValue ?? 0,
+            Enchantments = enchantments,
+            CustomName = customName
+        };
+    }
+
+    private List<StatusEffect> ParseStatusEffects(NbtCompound root)
+    {
+        var effects = new List<StatusEffect>();
+
+        try
+        {
+            // 尝试两种可能的标签名
+            var effectsList = root["ActiveEffects"] as NbtList ?? root["active_effects"] as NbtList;
+
+            if (effectsList != null)
+            {
+                foreach (var effectTag in effectsList.OfType<NbtCompound>())
+                {
+                    var effect = new StatusEffect
+                    {
+                        Id = effectTag["Id"]?.ByteValue.ToString() ?? 
+                             effectTag["id"]?.StringValue ?? "",
+                        Amplifier = effectTag["Amplifier"]?.ByteValue ?? 0,
+                        Duration = (effectTag["Duration"]?.IntValue ?? 0) / 20 // ticks -> 秒
+                    };
+
+                    effects.Add(effect);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Trace($"解析状态效果失败: {ex.Message}");
+        }
+
+        return effects;
     }
 }
 

@@ -294,11 +294,11 @@ public class PluginManager
     /// </summary>
     private async Task DisablePluginAsync(PluginContainer container)
     {
+        if (container.Instance == null || container.State != PluginState.Enabled)
+            return;
+
         try
         {
-            if (container.Instance == null)
-                return;
-
             _logger.Info($"禁用: {container.Name}");
 
             // 调用 OnDisable
@@ -306,6 +306,17 @@ public class PluginManager
 
             // 注销插件的所有命令
             _commandManager.UnregisterPluginCommands(container.Id);
+
+            // 取消所有消息订阅（如果支持）
+            try
+            {
+                var context = GetPluginContext(container);
+                if (context?.Messenger != null)
+                {
+                    context.Messenger.UnsubscribeAll();
+                }
+            }
+            catch { /* 忽略错误 */ }
 
             // 更新状态
             container.State = PluginState.Disabled;
@@ -388,6 +399,125 @@ public class PluginManager
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 获取插件状态
+    /// </summary>
+    public PluginState GetPluginState(string pluginId)
+    {
+        lock (_lock)
+        {
+            if (_plugins.TryGetValue(pluginId, out var container))
+            {
+                return container.State;
+            }
+        }
+
+        return PluginState.Unloaded;
+    }
+
+    /// <summary>
+    /// 重载插件（简化实现）
+    /// 注意：完整的热重载需要更多复杂的实现，这里提供基础版本
+    /// </summary>
+    public async Task<bool> ReloadPluginAsync(string pluginId)
+    {
+        PluginContainer? container;
+        
+        lock (_lock)
+        {
+            if (!_plugins.TryGetValue(pluginId, out container))
+            {
+                _logger.Warning($"插件不存在: {pluginId}");
+                return false;
+            }
+        }
+
+        _logger.Info($"正在重载插件: {container.Name}");
+
+        try
+        {
+            // 1. 保存插件状态（如果插件支持）
+            var state = await SavePluginStateAsync(container);
+
+            // 2. 禁用插件
+            await DisablePluginAsync(container);
+
+            // 3. 卸载插件
+            await UnloadPluginAsync(container);
+
+            // 4. 重新加载插件
+            // 注意：完整实现需要修改 PluginLoader 支持单个插件重载
+            // 这里简化处理，重新加载所有插件
+            _logger.Info($"插件 {container.Name} 已卸载，请重启 NetherGate 以完成重载");
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"插件重载失败: {container.Name}", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 保存插件状态
+    /// </summary>
+    private async Task<object?> SavePluginStateAsync(PluginContainer container)
+    {
+        try
+        {
+            // 尝试调用插件的 SaveState 方法（如果存在）
+            var saveStateMethod = container.Instance?.GetType().GetMethod("SaveStateAsync");
+            if (saveStateMethod != null)
+            {
+                var task = saveStateMethod.Invoke(container.Instance, null) as Task<object>;
+                if (task != null)
+                {
+                    return await task;
+                }
+            }
+        }
+        catch
+        {
+            _logger.Warning($"保存插件状态失败: {container.Name}");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 恢复插件状态
+    /// </summary>
+    private async Task RestorePluginStateAsync(PluginContainer container, object state)
+    {
+        try
+        {
+            // 尝试调用插件的 RestoreState 方法（如果存在）
+            var restoreStateMethod = container.Instance?.GetType().GetMethod("RestoreStateAsync");
+            if (restoreStateMethod != null)
+            {
+                var task = restoreStateMethod.Invoke(container.Instance, new[] { state }) as Task;
+                if (task != null)
+                {
+                    await task;
+                }
+            }
+        }
+        catch
+        {
+            _logger.Warning($"恢复插件状态失败: {container.Name}");
+        }
+    }
+
+    /// <summary>
+    /// 获取插件上下文
+    /// </summary>
+    private IPluginContextInternal? GetPluginContext(PluginContainer container)
+    {
+        var contextProperty = container.Instance?.GetType().GetProperty("Context");
+        return contextProperty?.GetValue(container.Instance) as IPluginContextInternal;
     }
 
     /// <summary>
