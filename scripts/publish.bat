@@ -78,7 +78,6 @@ dotnet publish src\NetherGate.Host\NetherGate.Host.csproj ^
     --self-contained true ^
     --output publish\%RID% ^
     -p:PublishSingleFile=true ^
-    -p:PublishTrimmed=true ^
     -p:EnableCompressionInSingleFile=true
 
 echo %NAME% 发布完成: publish\%RID%\

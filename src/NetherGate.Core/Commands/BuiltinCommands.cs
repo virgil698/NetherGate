@@ -55,6 +55,7 @@ public class HelpCommand : ICommand
             }
 
             message += "\n输入 'help <命令>' 查看详细用法";
+            message += "\n注意: 游戏内执行命令需要加 # 前缀（例如: #help）";
             return Task.FromResult(CommandResult.Ok(message));
         }
         else
@@ -87,25 +88,94 @@ public class HelpCommand : ICommand
 }
 
 /// <summary>
-/// Plugins 命令
+/// Plugin 命令 - 管理插件
 /// </summary>
-public class PluginsCommand : ICommand
+public class PluginCommand : ICommand
 {
     private readonly PluginManager _pluginManager;
+    private readonly ILogger _logger;
 
-    public string Name => "plugins";
-    public string Description => "显示已加载的插件列表";
-    public string Usage => "plugins";
+    public string Name => "plugin";
+    public string Description => "管理插件（list/reload/enable/disable/info）";
+    public string Usage => "plugin <list|reload|enable|disable|info> [插件ID]";
     public List<string> Aliases => new() { "pl" };
     public string PluginId => "nethergate";
-    public string? Permission => "nethergate.plugins.list";
+    public string? Permission => "nethergate.plugins.manage";
 
-    public PluginsCommand(PluginManager pluginManager)
+    public PluginCommand(PluginManager pluginManager, ILogger logger)
     {
         _pluginManager = pluginManager;
+        _logger = logger;
     }
 
-    public Task<CommandResult> ExecuteAsync(ICommandSender sender, string[] args)
+    public async Task<List<string>> TabCompleteAsync(ICommandSender sender, string[] args)
+    {
+        if (args.Length == 1)
+        {
+            // 补全子命令
+            var subcommands = new[] { "list", "reload", "enable", "disable", "info", "load", "unload" };
+            var prefix = args[0].ToLower();
+            return subcommands.Where(s => s.StartsWith(prefix)).ToList();
+        }
+
+        if (args.Length == 2)
+        {
+            var subcommand = args[0].ToLower();
+            if (subcommand is "reload" or "enable" or "disable" or "info" or "unload")
+            {
+                // 补全插件 ID
+                var plugins = _pluginManager.GetAllPluginContainers();
+                var prefix = args[1].ToLower();
+                
+                var suggestions = plugins
+                    .Select(p => p.Metadata.Id)
+                    .Where(id => id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                // 对于 reload，添加 "all" 选项
+                if (subcommand == "reload" && "all".StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    suggestions.Insert(0, "all");
+                }
+
+                return suggestions;
+            }
+        }
+
+        return await Task.FromResult(new List<string>());
+    }
+
+    public async Task<CommandResult> ExecuteAsync(ICommandSender sender, string[] args)
+    {
+        if (args.Length == 0)
+        {
+            return CommandResult.Fail($"用法: {Usage}\n子命令:\n" +
+                "  list           - 显示所有插件\n" +
+                "  reload <id>    - 重载指定插件\n" +
+                "  reload all     - 重载所有插件\n" +
+                "  enable <id>    - 启用插件\n" +
+                "  disable <id>   - 禁用插件\n" +
+                "  info <id>      - 查看插件详情\n" +
+                "  load <id>      - 加载新插件\n" +
+                "  unload <id>    - 卸载插件");
+        }
+
+        var subcommand = args[0].ToLower();
+
+        return subcommand switch
+        {
+            "list" or "ls" => await ListPluginsAsync(),
+            "reload" or "rl" => await ReloadPluginAsync(args),
+            "enable" => await EnablePluginAsync(args),
+            "disable" => await DisablePluginAsync(args),
+            "info" => await InfoPluginAsync(args),
+            "load" => await LoadPluginAsync(args),
+            "unload" => await UnloadPluginAsync(args),
+            _ => CommandResult.Fail($"未知子命令: {subcommand}\n使用 'plugin' 查看帮助")
+        };
+    }
+
+    private Task<CommandResult> ListPluginsAsync()
     {
         var plugins = _pluginManager.GetAllPluginContainers();
 
@@ -116,18 +186,264 @@ public class PluginsCommand : ICommand
 
         var message = $"已加载的插件 ({plugins.Count}):\n";
 
-        foreach (var plugin in plugins)
+        foreach (var plugin in plugins.OrderBy(p => p.Metadata.Id))
         {
-            var state = plugin.State == PluginState.Enabled ? "[已启用]" : "[已禁用]";
-            var author = plugin.Metadata.Author ?? "Unknown";
-            message += $"  {state} {plugin.Name} v{plugin.Version} by {author}\n";
-            if (!string.IsNullOrEmpty(plugin.Metadata.Description))
+            var stateColor = plugin.State switch
             {
-                message += $"     {plugin.Metadata.Description}\n";
+                PluginState.Enabled => "✓",
+                PluginState.Disabled => "✗",
+                PluginState.Error => "!",
+                _ => "?"
+            };
+
+            var author = plugin.Metadata.Author ?? "Unknown";
+            message += $"  {stateColor} {plugin.Metadata.Id} v{plugin.Version} by {author}\n";
+        }
+
+        message += "\n使用 'plugin info <id>' 查看详情";
+        return Task.FromResult(CommandResult.Ok(message));
+    }
+
+    private async Task<CommandResult> ReloadPluginAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            return CommandResult.Fail("用法: plugin reload <插件ID> 或 plugin reload all");
+        }
+
+        var pluginId = args[1].ToLower();
+
+        // 重载所有插件
+        if (pluginId == "all")
+        {
+            _logger.Info("开始重载所有插件...");
+            var plugins = _pluginManager.GetAllPluginContainers()
+                .Where(p => p.State == PluginState.Enabled)
+                .ToList();
+
+            var successCount = 0;
+            var failCount = 0;
+
+            foreach (var plugin in plugins)
+            {
+                try
+                {
+                    _logger.Info($"重载插件: {plugin.Metadata.Id}");
+                    await _pluginManager.ReloadPluginAsync(plugin.Metadata.Id);
+                    successCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"重载插件 {plugin.Metadata.Id} 失败", ex);
+                    failCount++;
+                }
+            }
+
+            return CommandResult.Ok($"插件重载完成: 成功 {successCount} 个，失败 {failCount} 个");
+        }
+
+        // 重载单个插件
+        var targetPlugin = _pluginManager.GetAllPluginContainers()
+            .FirstOrDefault(p => p.Metadata.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+
+        if (targetPlugin == null)
+        {
+            return CommandResult.Fail($"未找到插件: {pluginId}");
+        }
+
+        try
+        {
+            _logger.Info($"重载插件: {targetPlugin.Metadata.Id}");
+            await _pluginManager.ReloadPluginAsync(targetPlugin.Metadata.Id);
+            return CommandResult.Ok($"插件 {targetPlugin.Metadata.Id} 重载成功");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"重载插件失败", ex);
+            return CommandResult.Fail($"重载插件失败: {ex.Message}");
+        }
+    }
+
+    private async Task<CommandResult> EnablePluginAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            return CommandResult.Fail("用法: plugin enable <插件ID>");
+        }
+
+        var pluginId = args[1];
+        var plugin = _pluginManager.GetAllPluginContainers()
+            .FirstOrDefault(p => p.Metadata.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+
+        if (plugin == null)
+        {
+            return CommandResult.Fail($"未找到插件: {pluginId}");
+        }
+
+        if (plugin.State == PluginState.Enabled)
+        {
+            return CommandResult.Ok($"插件 {plugin.Metadata.Id} 已经是启用状态");
+        }
+
+        try
+        {
+            await _pluginManager.EnablePluginAsync(plugin.Metadata.Id);
+            return CommandResult.Ok($"插件 {plugin.Metadata.Id} 已启用");
+        }
+        catch (Exception ex)
+        {
+            return CommandResult.Fail($"启用插件失败: {ex.Message}");
+        }
+    }
+
+    private async Task<CommandResult> DisablePluginAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            return CommandResult.Fail("用法: plugin disable <插件ID>");
+        }
+
+        var pluginId = args[1];
+        var plugin = _pluginManager.GetAllPluginContainers()
+            .FirstOrDefault(p => p.Metadata.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+
+        if (plugin == null)
+        {
+            return CommandResult.Fail($"未找到插件: {pluginId}");
+        }
+
+        if (plugin.State == PluginState.Disabled)
+        {
+            return CommandResult.Ok($"插件 {plugin.Metadata.Id} 已经是禁用状态");
+        }
+
+        try
+        {
+            await _pluginManager.DisablePluginAsync(plugin.Metadata.Id);
+            return CommandResult.Ok($"插件 {plugin.Metadata.Id} 已禁用");
+        }
+        catch (Exception ex)
+        {
+            return CommandResult.Fail($"禁用插件失败: {ex.Message}");
+        }
+    }
+
+    private Task<CommandResult> InfoPluginAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            return Task.FromResult(CommandResult.Fail("用法: plugin info <插件ID>"));
+        }
+
+        var pluginId = args[1];
+        var plugin = _pluginManager.GetAllPluginContainers()
+            .FirstOrDefault(p => p.Metadata.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+
+        if (plugin == null)
+        {
+            return Task.FromResult(CommandResult.Fail($"未找到插件: {pluginId}"));
+        }
+
+        var meta = plugin.Metadata;
+        var message = $"插件信息:\n" +
+                     $"  ID: {meta.Id}\n" +
+                     $"  名称: {meta.Name}\n" +
+                     $"  版本: {meta.Version}\n" +
+                     $"  作者: {meta.Author ?? "未知"}\n" +
+                     $"  描述: {meta.Description ?? "无"}\n" +
+                     $"  状态: {GetStateText(plugin.State)}\n";
+
+        if (meta.Dependencies?.Count > 0)
+        {
+            message += $"  NuGet依赖:\n";
+            foreach (var dep in meta.Dependencies)
+            {
+                message += $"    - {dep}\n";
             }
         }
 
+        if (meta.LibraryDependencies?.Count > 0)
+        {
+            message += $"  库依赖:\n";
+            foreach (var dep in meta.LibraryDependencies)
+            {
+                message += $"    - {dep.Name} {dep.Version}\n";
+            }
+        }
+
+        if (meta.PluginDependencies?.Count > 0)
+        {
+            message += $"  插件依赖:\n";
+            foreach (var dep in meta.PluginDependencies)
+            {
+                var optional = dep.Optional ? " (可选)" : "";
+                message += $"    - {dep.Id} {dep.Version}{optional}\n";
+            }
+        }
+
+        if (!string.IsNullOrEmpty(meta.Website))
+        {
+            message += $"  网站: {meta.Website}\n";
+        }
+
         return Task.FromResult(CommandResult.Ok(message));
+    }
+
+    private Task<CommandResult> LoadPluginAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            return Task.FromResult(CommandResult.Fail("用法: plugin load <插件ID>"));
+        }
+
+        // 这个功能需要扫描 plugins 目录并加载新插件
+        return Task.FromResult(CommandResult.Fail("load 功能暂未实现，请重启 NetherGate 以加载新插件"));
+    }
+
+    private Task<CommandResult> UnloadPluginAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            return Task.FromResult(CommandResult.Fail("用法: plugin unload <插件ID>"));
+        }
+
+        var pluginId = args[1];
+        return Task.FromResult(CommandResult.Fail($"unload 功能暂未实现，请使用 'plugin disable {pluginId}' 代替"));
+    }
+
+    private static string GetStateText(PluginState state) => state switch
+    {
+        PluginState.Loaded => "已加载",
+        PluginState.Enabled => "已启用",
+        PluginState.Disabled => "已禁用",
+        PluginState.Error => "错误",
+        _ => "未知"
+    };
+}
+
+/// <summary>
+/// Plugins 命令 - 快捷方式（兼容旧命令）
+/// </summary>
+public class PluginsCommand : ICommand
+{
+    private readonly PluginCommand _pluginCommand;
+
+    public string Name => "plugins";
+    public string Description => "显示已加载的插件列表（快捷方式）";
+    public string Usage => "plugins";
+    public List<string> Aliases => new();
+    public string PluginId => "nethergate";
+    public string? Permission => "nethergate.plugins.manage";
+
+    public PluginsCommand(PluginCommand pluginCommand)
+    {
+        _pluginCommand = pluginCommand;
+    }
+
+    public async Task<CommandResult> ExecuteAsync(ICommandSender sender, string[] args)
+    {
+        // 转发到 plugin list
+        return await _pluginCommand.ExecuteAsync(sender, new[] { "list" });
     }
 }
 

@@ -1,6 +1,7 @@
 using NetherGate.API.Data;
 using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
+using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
 using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
@@ -114,6 +115,25 @@ public interface IPluginContext
     /// 用于插件间通信
     /// </summary>
     IPluginMessenger Messenger { get; }
+
+    /// <summary>
+    /// 游戏显示 API
+    /// 用于在游戏中显示 BossBar、Title、ActionBar、计分板等
+    /// </summary>
+    IGameDisplayApi GameDisplay { get; }
+
+    /// <summary>
+    /// NBT 数据写入器
+    /// 用于编辑和写入玩家/世界 NBT 数据
+    /// ⚠️ 警告：修改 NBT 需要谨慎，建议在服务器停止时操作
+    /// </summary>
+    INbtDataWriter NbtDataWriter { get; }
+
+    /// <summary>
+    /// 网络事件监听器
+    /// 用于监听 Minecraft 服务器的网络层事件
+    /// </summary>
+    INetworkEventListener NetworkEventListener { get; }
 
     /// <summary>
     /// 获取其他插件

@@ -43,11 +43,11 @@ public class LogParser
         RegexOptions.Compiled);
 
     // 服务器启动完成: Done (X.XXXs)! For help, type "help"
-    private static readonly Regex ServerStartedPattern = new(
-        @"^Done \([\d.]+s\)! For help",
+    private static readonly Regex ServerReadyPattern = new(
+        @"^Done \(([\d.]+)s\)! For help",
         RegexOptions.Compiled);
 
-    // 服务器停止: Stopping server
+    // 服务器准备关闭: Stopping server
     private static readonly Regex ServerStoppingPattern = new(
         @"^Stopping server$",
         RegexOptions.Compiled);
@@ -99,6 +99,27 @@ public class LogParser
     /// </summary>
     private async Task TryParseSpecificEventsAsync(string message)
     {
+        // 服务器启动完成
+        var readyMatch = ServerReadyPattern.Match(message);
+        if (readyMatch.Success)
+        {
+            var startupTime = double.Parse(readyMatch.Groups[1].Value);
+            await _eventBus.PublishAsync(new ServerReadyEvent
+            {
+                StartupTimeSeconds = startupTime
+            });
+            _logger.Info($"服务器已完全启动 (耗时: {startupTime:F3} 秒)");
+            return;
+        }
+
+        // 服务器准备关闭
+        if (ServerStoppingPattern.IsMatch(message))
+        {
+            await _eventBus.PublishAsync(new ServerShuttingDownEvent());
+            _logger.Info("服务器正在关闭...");
+            return;
+        }
+
         // 玩家聊天
         var chatMatch = PlayerChatPattern.Match(message);
         if (chatMatch.Success)

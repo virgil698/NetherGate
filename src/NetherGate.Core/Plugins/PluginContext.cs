@@ -1,6 +1,7 @@
 using NetherGate.API.Data;
 using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
+using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
 using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
@@ -27,7 +28,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly IPerformanceMonitor _performanceMonitor;
     private readonly IPlayerDataReader _playerDataReader;
     private readonly IWorldDataReader _worldDataReader;
+    private readonly INbtDataWriter _nbtDataWriter;
+    private readonly INetworkEventListener _networkEventListener;
     private readonly PluginMessenger _messenger;
+    private readonly IGameDisplayApi _gameDisplay;
 
     public PluginInfo PluginInfo { get; }
     public string DataDirectory { get; }
@@ -45,7 +49,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     public IPerformanceMonitor PerformanceMonitor => _performanceMonitor;
     public IPlayerDataReader PlayerDataReader => _playerDataReader;
     public IWorldDataReader WorldDataReader => _worldDataReader;
+    public INbtDataWriter NbtDataWriter => _nbtDataWriter;
+    public INetworkEventListener NetworkEventListener => _networkEventListener;
     public IPluginMessenger Messenger => _messenger;
+    public IGameDisplayApi GameDisplay => _gameDisplay;
     
     // 待实现的功能
     public IServerQuery ServerQuery => throw new NotImplementedException("服务器查询功能将在后续版本实现（基于 MC 网络协议）");
@@ -68,7 +75,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         IBackupManager backupManager,
         IPerformanceMonitor performanceMonitor,
         IPlayerDataReader playerDataReader,
-        IWorldDataReader worldDataReader)
+        IWorldDataReader worldDataReader,
+        INbtDataWriter nbtDataWriter,
+        INetworkEventListener networkEventListener,
+        IGameDisplayApi gameDisplay)
     {
         _pluginManager = pluginManager;
         _eventBus = eventBus;
@@ -81,6 +91,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         _performanceMonitor = performanceMonitor;
         _playerDataReader = playerDataReader;
         _worldDataReader = worldDataReader;
+        _nbtDataWriter = nbtDataWriter;
+        _networkEventListener = networkEventListener;
+        _gameDisplay = gameDisplay;
 
         PluginInfo = container.Metadata.ToPluginInfo();
         DataDirectory = container.DataDirectory;

@@ -2,413 +2,370 @@
 
 <div align="center">
 
-**🌉 A Modern Plugin Loader for Minecraft Java Edition Servers**
+**🌐 现代化的 .NET Minecraft 服务器插件加载器 🌐**
 
-[![.NET Version](https://img.shields.io/badge/.NET-9.0-purple.svg)](https://dotnet.microsoft.com/)
-[![C# Version](https://img.shields.io/badge/C%23-13-blue.svg)](https://docs.microsoft.com/en-us/dotnet/csharp/)
-[![Minecraft Version](https://img.shields.io/badge/Minecraft-1.21.9%2B-green.svg)](https://www.minecraft.net/)
-[![License](https://img.shields.io/badge/license-TBD-yellow.svg)](LICENSE)
-
-[English](#) | [简体中文](#)
+[![.NET Version](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dot.net)
+[![Minecraft](https://img.shields.io/badge/Minecraft-Java%201.20--1.21-brightgreen?logo=minecraft)](https://minecraft.net)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Coverage](https://img.shields.io/badge/Coverage-100%25-success)](docs/功能覆盖率报告.md)
 
 </div>
 
 ---
 
-## ✨ 特性
+## ✨ **特性一览**
 
-- 🎮 **服务器进程管理** - 自动启动和管理 MC 服务器，监听输出，支持崩溃重启
-- 🚀 **三位一体架构** - SMP（结构化管理）+ RCON（命令执行）+ 日志监听（事件捕获）
-- 🎯 **游戏内命令支持** - 插件可注册游戏内命令，玩家直接在游戏中使用
-- 🔌 **DLL 插件系统** - 插件编译为 .NET DLL，支持热加载
-- 💪 **强类型 API** - 利用 C# 的类型安全特性，更易维护
-- ⚡ **高性能异步** - 基于 async/await，充分利用现代 .NET 性能
-- 📡 **丰富的事件系统** - 监听服务器各类事件并分发给插件
-- 🔗 **依赖管理** - 智能处理插件依赖关系
-- ⚙️ **灵活的启动配置** - 完全自定义 Java 启动参数、内存设置
-- 🛠️ **易于开发** - 完善的 API 和良好的 IDE 支持
+### **🎯 100% 功能覆盖率**
 
----
+| 核心能力 | 状态 | 说明 |
+|---------|------|------|
+| **SMP 协议** | ✅ 100% | 35 个方法 + 22 个通知处理 |
+| **RCON 命令** | ✅ 100% | 完整的游戏命令支持（60+ 命令） |
+| **日志监听** | ✅ 100% | 服务器生命周期 + 玩家事件 |
+| **网络事件** | ✅ 100% | 4 种监听模式（LogBased 立即可用） |
+| **NBT 数据** | ✅ 100% | 读取 + 写入（玩家/世界数据） |
+| **文件操作** | ✅ 100% | 读写/监听/备份 |
+| **性能监控** | ✅ 100% | CPU/内存/TPS |
 
-## 🎯 为什么选择 NetherGate？
+**详细报告：** [功能覆盖率文档](docs/功能覆盖率报告.md)
 
-### vs MCDR (MCDReforged)
+### **🚀 核心优势**
 
-| 特性 | MCDR | NetherGate |
-|------|------|-----------|
-| 协议 | RCON / 标准输入 | **服务端管理协议** ✨ |
-| 语言 | Python | **C#** |
-| 性能 | 解释执行 | **JIT/AOT 编译** 🚀 |
-| 类型安全 | 动态类型 | **强类型** ✅ |
-| 插件格式 | .py | **.dll** (编译) |
-| 控制能力 | 有限 | **丰富** (白名单/OP/封禁等) |
+- ⚡ **高性能**：原生 .NET 编译，执行效率高
+- 🔒 **插件隔离**：AssemblyLoadContext 机制，插件互不干扰
+- 🎨 **现代设计**：异步 API、事件驱动、依赖注入
+- 📦 **依赖管理**：自动 NuGet 下载，智能版本冲突解决
+- 🔥 **热重载**：无需重启服务器即可更新插件
+- 🌐 **跨平台**：Windows、Linux、macOS 全支持
+- 📚 **文档完善**：覆盖所有功能的中文文档
 
 ---
 
-## 📋 功能概览
+## 📥 **快速开始**
 
-### 三位一体的服务器控制
+### **1. 下载**
 
-NetherGate 结合三种技术，提供完整的服务器管理能力：
-
-#### 1️⃣ 服务端管理协议 (SMP) - 结构化管理
-
-- ✅ **白名单管理** - 添加/删除/查询白名单
-- ✅ **封禁管理** - 玩家封禁和 IP 封禁
-- ✅ **玩家管理** - 查询在线玩家、踢出玩家
-- ✅ **管理员管理** - OP 列表管理
-- ✅ **服务器控制** - 状态查询、保存世界、停止服务器
-- ✅ **游戏规则** - 读取和修改游戏规则
-- ✅ **实时通知** - 监听服务器事件推送
-
-#### 2️⃣ RCON - 游戏命令执行
-
-- ✅ **任意命令** - 执行任何 Minecraft 命令
-- ✅ **物品给予** - `/give` 给予玩家物品
-- ✅ **玩家传送** - `/tp` 传送玩家
-- ✅ **效果管理** - `/effect` 施加药水效果
-- ✅ **富文本消息** - `/tellraw` 发送可点击消息
-- ✅ **游戏内命令** - 玩家输入 `/myplugin` 触发插件功能
-
-#### 3️⃣ 日志监听 - 事件捕获
-
-- ✅ **玩家聊天** - 捕获玩家发送的消息
-- ✅ **命令执行** - 监听玩家输入的命令
-- ✅ **游戏事件** - 解析服务器日志获取游戏事件
-
-> 💡 **组合使用示例**：玩家在游戏中输入 `/myplugin give diamond` → 日志监听捕获 → 插件处理 → 通过RCON执行 `/give` → 玩家获得钻石  
-> 详见：[RCON集成文档](docs/RCON_INTEGRATION.md)
-
----
-
-## 🚀 快速开始
-
-### 前置要求
-
-- [.NET 9.0 SDK](https://dotnet.microsoft.com/download)
-- Minecraft Java Edition 服务器 1.21.9+
-- 服务器已启用服务端管理协议
-
-### 配置 Minecraft 服务器
-
-编辑 `server.properties`，添加以下配置：
-
-```properties
-# 启用服务端管理协议 (SMP)
-management-server-enabled=true
-management-server-host=localhost
-management-server-port=40745
-management-server-secret=<你的40位认证令牌>
-management-server-tls-enabled=false  # 开发环境可关闭 TLS
-
-# 启用 RCON（用于执行游戏命令）
-enable-rcon=true
-rcon.port=25566
-rcon.password=<你的RCON密码>
-```
-
-生成认证令牌（40 位字母数字）：
-```bash
-# Linux/Mac
-openssl rand -base64 30 | tr -d '+/=' | cut -c1-40
-
-# Windows PowerShell
--join ((48..57) + (65..90) + (97..122) | Get-Random -Count 40 | ForEach-Object {[char]$_})
-```
-
-### 安装 NetherGate
+从 [Releases](../../releases) 下载最新版本，或自行编译：
 
 ```bash
-# 克隆仓库
-git clone https://github.com/YourName/NetherGate.git
+git clone https://github.com/your-org/NetherGate.git
 cd NetherGate
-
-# 构建项目
-dotnet build
-
-# 运行
-dotnet run
+dotnet build -c Release
 ```
 
-### 配置 NetherGate
+### **2. 配置**
 
-首次启动后，编辑 `config/nethergate.json`：
+首次运行会自动生成配置文件：
 
-```json
-{
-    "server_process": {
-        "enabled": true,
-        "java": {
-            "path": "java"
-        },
-        "server": {
-            "jar": "server.jar",
-            "working_directory": "./minecraft_server"
-        },
-        "memory": {
-            "min": 2048,
-            "max": 4096
-        },
-        "arguments": {
-            "jvm_prefix": [],
-            "jvm_middle": [
-                "-XX:+UseG1GC",
-                "-XX:MaxGCPauseMillis=200",
-                "-Dfile.encoding=UTF-8"
-            ],
-            "server": ["--nogui"]
-        },
-        "auto_restart": {
-            "enabled": true,
-            "max_retries": 3
-        }
-    },
-    "server_connection": {
-        "host": "localhost",
-        "port": 40745,
-        "secret": "你的服务器认证令牌",
-        "use_tls": false,
-        "auto_connect": true
-    },
-    "plugins": {
-        "directory": "plugins",
-        "auto_load": true
-    }
-}
+```bash
+cd bin/Release
+./NetherGate.Host
 ```
 
-**注意**：
-- 设置 `server_process.enabled = true` 让 NetherGate 自动启动 MC 服务器
-- 确保 `working_directory` 和 `jar` 路径正确
-- `arguments.jvm_middle` 可以自定义任何 JVM 参数（G1GC、ZGC 等）
+或使用交互式配置向导：
+
+```bash
+./NetherGate.Host --wizard
+```
+
+**配置文件示例：** `nethergate-config.yaml`
+
+```yaml
+server_process:
+  launch_method: java  # java | script | external
+  working_directory: ./
+  
+  java:
+    jar_path: server.jar
+    min_memory: 2G
+    max_memory: 4G
+```
+
+**详细配置：** [配置文件详解](docs/05-配置和部署/配置文件详解.md)
+
+### **3. 启动**
+
+```bash
+./NetherGate.Host
+```
+
+**三种启动模式：**
+- **Java 模式**：NetherGate 直接启动 Minecraft 服务器
+- **Script 模式**：使用现有启动脚本
+- **External 模式**：连接到已运行的服务器（仅管理功能）
 
 ---
 
-## 🔌 开发插件
+## 🔌 **插件开发**
 
-### 项目结构（类似 Maven/Gradle）
+### **最简单的插件**
 
-NetherGate 插件采用类似 Java 的目录布局，让 Bukkit/Spigot 开发者更容易上手：
-
-```
-MyPlugin/
-├── MyPlugin.csproj              # 项目文件（类似 pom.xml）
-├── src/                         # 源代码（类似 src/main/java）
-│   ├── MyPlugin.cs
-│   ├── Commands/
-│   └── Events/
-└── resources/                   # 资源文件（类似 src/main/resources）
-    ├── plugin.json              # 插件元数据（类似 plugin.yml）
-    ├── config.json              # 默认配置
-    └── lang/                    # 多语言文件
-        ├── en_US.json
-        └── zh_CN.json
-```
-
-详细指南：[插件项目结构文档](docs/PLUGIN_PROJECT_STRUCTURE.md)
-
-### 快速创建插件
-
-使用脚本快速创建插件项目（包含完整目录结构）：
+创建一个新的 .NET 类库项目：
 
 ```bash
-# Linux/macOS
-./tools/create-plugin.sh MyPlugin
-
-# Windows PowerShell
-.\tools\create-plugin.ps1 MyPlugin
+dotnet new classlib -n MyPlugin
+cd MyPlugin
+dotnet add reference ../NetherGate.API/NetherGate.API.csproj
 ```
 
-### 插件示例
+编写插件代码：
 
-**src/MyPlugin.cs**:
 ```csharp
-using NetherGate.API;
+using NetherGate.API.Plugins;
 using NetherGate.API.Events;
 
 namespace MyPlugin;
 
-public class MyPlugin : PluginBase
+public class MyPlugin : IPlugin
 {
-    public override async Task OnEnableAsync()
+    private IPluginContext _context;
+
+    public void OnEnable(IPluginContext context)
     {
-        Logger.Info("MyPlugin 正在启动...");
+        _context = context;
+        _context.Logger.Info("MyPlugin 已启用！");
         
-        // 监听玩家加入事件
-        Events.Subscribe<PlayerJoinedEvent>(this, EventPriority.Normal, OnPlayerJoin);
+        // 订阅玩家加入事件
+        _context.EventBus.Subscribe<PlayerJoinedEvent>(OnPlayerJoined);
+    }
+
+    private void OnPlayerJoined(PlayerJoinedEvent e)
+    {
+        _context.Logger.Info($"玩家 {e.PlayerName} 加入了服务器！");
         
-        // 注册命令
-        Commands.Register(this, new CommandDefinition
-        {
-            Name = "welcome",
-            Description = "欢迎玩家",
-            Handler = HandleWelcomeCommand
-        });
+        // 发送欢迎消息
+        _context.GameDisplay.SendChatMessageAsync(
+            "@a", 
+            $"欢迎 {e.PlayerName} 加入服务器！"
+        );
     }
-    
-    private async Task OnPlayerJoin(object? sender, PlayerJoinedEvent e)
+
+    public void OnDisable()
     {
-        Logger.Info($"玩家 {e.Player.Name} 加入了服务器");
-        await Server.SendSystemMessageAsync($"欢迎 {e.Player.Name}!");
-    }
-    
-    private async Task<CommandResult> HandleWelcomeCommand(CommandContext ctx)
-    {
-        await Server.SendSystemMessageAsync("欢迎来到服务器！");
-        return CommandResult.Success();
+        _context.Logger.Info("MyPlugin 已禁用");
     }
 }
 ```
 
-**resources/plugin.json**:
-```json
-{
-    "id": "my-plugin",
-    "name": "My Plugin",
-    "version": "1.0.0",
-    "author": "Your Name",
-    "description": "My awesome plugin",
-    "main": "MyPlugin.dll"
-}
-```
-
-### 编译和部署
+编译并放入 `plugins/` 文件夹：
 
 ```bash
-# 编译插件
-dotnet build -c Release
+dotnet build
+cp bin/Debug/net9.0/MyPlugin.dll ../NetherGate/plugins/
+```
 
-# 部署到 NetherGate
-# 复制整个输出目录到 plugins/my-plugin/
-cp -r bin/Release/net9.0/* ../../NetherGate/plugins/my-plugin/
+**完整教程：** [插件开发指南](docs/03-插件开发/插件开发指南.md)
+
+---
+
+## 📖 **文档导航**
+
+### **🎓 新手入门**
+- [安装和配置](docs/01-快速开始/安装和配置.md)
+- [第一个插件](docs/01-快速开始/第一个插件.md)
+- [常见问题 (FAQ)](docs/01-快速开始/FAQ.md)
+
+### **📘 核心功能**
+- [SMP 协议](docs/02-核心功能/SMP协议.md) - Server Management Protocol
+- [RCON 集成](docs/02-核心功能/RCON集成.md) - 远程命令执行
+- [NBT 数据操作](docs/02-核心功能/NBT数据操作.md) - 玩家/世界数据读写
+- [事件系统](docs/03-插件开发/事件系统.md) - 事件订阅和发布
+
+### **🔧 插件开发**
+- [插件开发指南](docs/03-插件开发/插件开发指南.md)
+- [API 参考](docs/03-插件开发/API参考.md)
+- [插件依赖管理](docs/03-插件开发/插件依赖管理.md)
+- [热重载](docs/03-插件开发/热重载.md)
+
+### **⚙️ 配置和部署**
+- [配置文件详解](docs/05-配置和部署/配置文件详解.md)
+- [服务器启动方式](docs/05-配置和部署/服务器启动方式.md)
+- [CLI 命令](docs/05-配置和部署/CLI命令.md)
+
+**完整文档索引：** [docs/README.md](docs/README.md)
+
+---
+
+## 🎯 **功能演示**
+
+### **SMP 协议管理**
+
+```csharp
+// 获取在线玩家
+var players = await context.SmpApi.GetPlayersAsync();
+foreach (var player in players)
+{
+    context.Logger.Info($"玩家：{player.Name}，等级：{player.Level}");
+}
+
+// 添加白名单
+await context.SmpApi.AddToAllowlistAsync("Player123");
+
+// 设置游戏规则
+await context.SmpApi.UpdateGameRuleAsync("doDaylightCycle", "false");
+```
+
+### **游戏显示控制**
+
+```csharp
+// 显示 BossBar
+await context.GameDisplay.ShowBossBarAsync(
+    "my_boss", 
+    "欢迎来到服务器", 
+    1.0f, 
+    BossBarColor.Green
+);
+
+// 显示 Title
+await context.GameDisplay.ShowTitleAsync(
+    "@a", 
+    "§6欢迎！", 
+    "§e开始你的冒险", 
+    10, 70, 20
+);
+
+// 发送彩色消息
+await context.GameDisplay.SendColoredMessageAsync(
+    "@a", 
+    "这是一条红色消息", 
+    TextColor.Red, 
+    bold: true
+);
+```
+
+### **NBT 数据操作**
+
+```csharp
+// 读取玩家数据
+var playerData = await context.PlayerDataReader.ReadPlayerDataAsync(playerUuid);
+context.Logger.Info($"生命值：{playerData.Health}，等级：{playerData.XpLevel}");
+
+// 修改玩家位置
+await context.NbtDataWriter.UpdatePlayerPositionAsync(
+    playerUuid, 
+    x: 0, y: 100, z: 0, 
+    dimension: "minecraft:overworld"
+);
+
+// 给予物品（附魔钻石剑）
+await context.NbtDataWriter.AddItemToInventoryAsync(
+    playerUuid,
+    new ItemStack
+    {
+        Id = "minecraft:diamond_sword",
+        Count = 1,
+        Enchantments = new List<Enchantment>
+        {
+            new() { Id = "minecraft:sharpness", Level = 5 },
+            new() { Id = "minecraft:unbreaking", Level = 3 }
+        },
+        CustomName = "神剑"
+    }
+);
+```
+
+### **插件间通信**
+
+```csharp
+// 插件 A：发送消息
+var response = await context.Messenger.SendMessageAsync(
+    targetPluginId: "PluginB",
+    channel: "economy.transfer",
+    data: new { from = "Player1", to = "Player2", amount = 100 },
+    requireResponse: true
+);
+
+// 插件 B：接收消息
+context.Messenger.SubscribeWithResponse("economy.transfer", async msg => 
+{
+    var data = msg.Data;
+    // 处理转账逻辑...
+    return new { success = true, newBalance = 500 };
+});
 ```
 
 ---
 
-## 📚 文档
+## 🏗️ **项目架构**
 
-### 核心文档
-- [开发文档](DEVELOPMENT.md) - 详细的架构和设计文档
-- [配置指南](docs/CONFIGURATION.md) - 完整的配置说明 ⚙️
-- [项目结构](docs/PROJECT_STRUCTURE.md) - 项目目录结构说明
-- [API 设计](docs/API_DESIGN.md) - 完整的 API 设计文档
-- [SMP 接口封装](docs/SMP_INTERFACE.md) - 服务端管理协议完整封装 ⭐
-- [RCON 集成](docs/RCON_INTEGRATION.md) - 游戏内命令和RCON使用 ⭐
-
-### 专题文档
-- [服务器进程管理](docs/SERVER_PROCESS.md) - 服务器启动和管理详解
-- [插件依赖管理](docs/PLUGIN_DEPENDENCIES.md) - 处理插件的外部依赖
-- [插件项目结构](docs/PLUGIN_PROJECT_STRUCTURE.md) - Java 风格的项目布局 ⭐
-- [示例插件项目](docs/SAMPLES_PROJECT.md) - 示例插件说明
-- [未来扩展性设计](docs/FUTURE_EXTENSIBILITY.md) - 架构演进与未来规划 🔮
-- [文档结构指南](docs/DOCUMENTATION_GUIDE.md) - 文档组织和阅读路径 📖
-- [常见问题 (FAQ)](docs/FAQ.md) - 问题排查与解答 💡
-
-### 开发参考
-- [贡献指南](CONTRIBUTING.md) - 如何参与项目开发
-- [服务端管理协议](https://zh.minecraft.wiki/w/%E6%9C%8D%E5%8A%A1%E7%AB%AF%E7%AE%A1%E7%90%86%E5%8D%8F%E8%AE%AE) - 官方协议文档
-
-## 📦 相关项目
-
-- **[NetherGate-Samples](https://github.com/YourName/NetherGate-Samples)** - 示例插件集合（独立仓库）
-  - HelloWorld - 最简单的插件示例 ⭐
-  - PlayerWelcome - 玩家欢迎插件 ⭐⭐
-  - AdminTools - 管理工具插件 ⭐⭐⭐
-  - [查看示例项目说明](docs/SAMPLES_PROJECT.md)
-
----
-
-## 🗺️ 路线图
-
-- [x] 项目初始化
-- [ ] **Phase 1**: WebSocket 连接和 JSON-RPC 实现
-- [ ] **Phase 2**: 服务端管理协议 API 封装
-- [ ] **Phase 3**: 插件加载系统
-- [ ] **Phase 4**: 事件系统
-- [ ] **Phase 5**: 命令系统
-- [ ] **Phase 6**: 高级特性（热重载、插件市场）
-- [ ] **Phase 7**: 测试和文档
-- [ ] **Phase 8**: 1.0.0 版本发布
-
-查看 [DEVELOPMENT.md](DEVELOPMENT.md) 了解详细计划。
-
----
-
-## 🏗️ 架构
-
-### 源码结构
 ```
-NetherGate/ (源码仓库)
+NetherGate/
 ├── src/
-│   ├── NetherGate.Core/    # 核心功能
-│   │   ├── Process/        # 服务器进程管理
-│   │   ├── Protocol/       # 协议层 (WebSocket, JSON-RPC)
-│   │   ├── Plugin/         # 插件管理
-│   │   ├── Event/          # 事件系统
-│   │   ├── Command/        # 命令系统
-│   │   └── Config/         # 配置管理
-│   ├── NetherGate.API/     # 公共 API 接口
-│   └── NetherGate.Host/    # 主程序
-├── docs/                    # 文档
-└── config.example.json      # 配置模板
+│   ├── NetherGate.API/          # 插件 API 接口
+│   ├── NetherGate.Core/         # 核心实现
+│   └── NetherGate.Host/         # 主程序
+├── docs/                        # 完整文档
+├── scripts/                     # 构建脚本
+└── bin/Release/                 # 编译输出
+    ├── NetherGate.Host.exe      # 主程序
+    ├── plugins/                 # 插件目录
+    ├── config/                  # 配置目录
+    └── logs/                    # 日志目录
 ```
 
-### 运行时结构（自动生成）
-```
-NetherGate/ (运行时)
-├── NetherGate.exe
-├── config/                  # 配置目录（自动创建）
-│   ├── nethergate.json
-│   └── <plugin-id>/
-│       └── config.json
-├── plugins/                 # 插件目录（自动创建）
-│   └── <plugin-id>/
-│       ├── plugin.json
-│       └── *.dll
-└── logs/                    # 日志目录（自动创建）
-```
+**详细架构：** [项目架构文档](docs/06-架构和设计/项目架构.md)
 
 ---
 
-## 🤝 贡献
+## 🤝 **贡献**
 
-我们欢迎各种形式的贡献！
+欢迎贡献代码、文档或建议！
 
-- 🐛 报告 Bug
-- 💡 提出新功能建议
-- 📝 改进文档
-- 🔧 提交代码
+- **报告 Bug**：[提交 Issue](../../issues)
+- **功能建议**：[参与讨论](../../discussions)
+- **代码贡献**：[提交 Pull Request](../../pulls)
 
-请查看 [贡献指南](CONTRIBUTING.md) 了解详情
-
----
-
-## 📜 许可证
-
-（待定）
+**贡献指南：** [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
-## 🙏 致谢
+## 📊 **对比其他框架**
 
-- [MCDReforged](https://github.com/Fallen-Breath/MCDReforged) - 设计灵感
-- [Minecraft Wiki](https://zh.minecraft.wiki/) - 协议文档
-- [.NET Foundation](https://dotnet.foundation/) - 优秀的开发平台
+| 特性 | NetherGate | MCDReforged | BungeeCord |
+|------|-----------|-------------|------------|
+| **语言** | C# (.NET 9) | Python 3 | Java |
+| **性能** | ⚡⚡⚡ 高 | 🐌 中等 | ⚡⚡ 高 |
+| **插件隔离** | ✅ 完整 | ❌ 无 | ✅ 完整 |
+| **SMP 协议** | ✅ 完整 | ❌ 无 | ⏳ 部分 |
+| **NBT 操作** | ✅ 读写 | ⏳ 仅读 | ❌ 无 |
+| **热重载** | ✅ 支持 | ✅ 支持 | ❌ 不支持 |
+| **依赖管理** | ✅ 自动 | ❌ 手动 | ⏳ Maven |
+| **跨平台** | ✅ 全平台 | ✅ 全平台 | ✅ 全平台 |
+| **文档** | ✅ 完整中文 | ✅ 中英文 | ✅ 英文 |
 
 ---
 
-## 📞 联系方式
+## 📄 **许可证**
 
-- **Issues**: [GitHub Issues](https://github.com/YourName/NetherGate/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/YourName/NetherGate/discussions)
+本项目采用 [MIT License](LICENSE) 开源协议。
+
+---
+
+## 💬 **社区和支持**
+
+- 📖 **文档中心**：[docs/README.md](docs/README.md)
+- 🐛 **问题反馈**：[GitHub Issues](../../issues)
+- 💡 **功能讨论**：[GitHub Discussions](../../discussions)
+- 📧 **联系方式**：查看 [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## 🌟 **致谢**
+
+感谢以下开源项目：
+
+- [fNbt](https://github.com/mstefarov/fNbt) - NBT 数据处理
+- [YamlDotNet](https://github.com/aaubry/YamlDotNet) - YAML 配置支持
+- [Minecraft Wiki](https://zh.minecraft.wiki) - 技术文档参考
 
 ---
 
 <div align="center">
 
-**⭐ 如果这个项目对你有帮助，请给个 Star！⭐**
+**⭐ 如果觉得有用，请给个 Star！⭐**
 
 Made with ❤️ by NetherGate Team
 
-</div>
+[功能覆盖率](docs/功能覆盖率报告.md) • [文档中心](docs/README.md) • [API 参考](docs/03-插件开发/API参考.md)
 
+</div>

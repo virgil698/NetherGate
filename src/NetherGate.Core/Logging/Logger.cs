@@ -85,20 +85,22 @@ public class ConsoleLogWriter : ILogWriter
     public void Write(LogEntry entry)
     {
         var levelText = GetLevelText(entry.Level);
-        var timestamp = entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff");
+        var timestamp = entry.Timestamp.ToString("HH:mm:ss");
 
         if (_useColors)
         {
-            // 只对日志级别部分上色
-            Console.Write($"[{timestamp}] [");
+            // 格式: [HH:mm:ss LEVEL]: 消息
+            Console.Write("[");
+            Console.Write(timestamp);
+            Console.Write(" ");
             Console.ForegroundColor = GetLevelColor(entry.Level);
             Console.Write(levelText);
             Console.ResetColor();
-            Console.WriteLine($"] [{entry.LoggerName}] {entry.Message}");
+            Console.WriteLine($"]: {entry.Message}");
         }
         else
         {
-            Console.WriteLine($"[{timestamp}] [{levelText}] [{entry.LoggerName}] {entry.Message}");
+            Console.WriteLine($"[{timestamp} {levelText}]: {entry.Message}");
         }
 
         if (entry.Exception != null)
@@ -170,9 +172,9 @@ public class FileLogWriter : ILogWriter, IDisposable
             if (_writer == null)
                 return;
 
-            var timestamp = entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff");
-            var level = entry.Level.ToString().ToUpper().PadRight(7);
-            var message = $"[{timestamp}] [{level}] [{entry.LoggerName}] {entry.Message}";
+            var timestamp = entry.Timestamp.ToString("HH:mm:ss");
+            var levelText = GetFileLevelText(entry.Level);
+            var message = $"[{timestamp} {levelText}]: {entry.Message}";
 
             _writer.WriteLine(message);
             if (entry.Exception != null)
@@ -190,6 +192,17 @@ public class FileLogWriter : ILogWriter, IDisposable
             }
         }
     }
+
+    private static string GetFileLevelText(LogLevel level) => level switch
+    {
+        LogLevel.Trace => "TRACE",
+        LogLevel.Debug => "DEBUG",
+        LogLevel.Info => "INFO",
+        LogLevel.Warning => "WARN",
+        LogLevel.Error => "ERROR",
+        LogLevel.Fatal => "FATAL",
+        _ => "UNKNW"
+    };
 
     private void ArchiveOldLog()
     {

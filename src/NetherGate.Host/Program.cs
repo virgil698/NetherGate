@@ -10,6 +10,7 @@ using NetherGate.Core.Events;
 using NetherGate.Core.Logging;
 using NetherGate.Core.Plugins;
 using NetherGate.Core.Protocol;
+using NetherGate.Core.WebSocket;
 using NetherGate.Host.Cli;
 
 namespace NetherGate.Host;
@@ -17,12 +18,14 @@ namespace NetherGate.Host;
 class Program
 {
     private static NetherGateConfig? _config;
+    private static WebSocketConfig? _wsConfig;
     private static ILogger? _logger;
     private static ILoggerFactory? _loggerFactory;
     private static IEventBus? _eventBus;
     private static ICommandManager? _commandManager;
     private static PluginManager? _pluginManager;
     private static SmpClient? _smpClient;
+    private static WebSocketServer? _wsServer;
 
     static async Task<int> Main(string[] args)
     {
@@ -38,7 +41,7 @@ class Program
             return await CliCommandHandler.ExecuteAsync(cliArgs);
         }
         
-        var startTime = DateTime.Now;
+        DateTime startTime = DateTime.MinValue; // 稍后在基础框架启动完成后设置
         
         try
         {
@@ -51,7 +54,7 @@ class Program
             Console.WriteLine();
 
             // 1. 加载配置
-            Console.WriteLine("[NetherGate] [1/7] 加载配置...");
+            Console.WriteLine("[NetherGate] [1/8] 加载配置...");
             
             // 检查配置文件是否存在
             var configPath = ConfigurationLoader.GetConfigPath();
@@ -83,9 +86,12 @@ class Program
             }
             
             _config = ConfigurationLoader.Load();
+            
+            // 加载 WebSocket 配置（首次运行会自动生成 websocket-config.yaml）
+            _wsConfig = WebSocketConfigLoader.Load();
 
             // 2. 初始化日志系统
-            Console.WriteLine("[NetherGate] [2/7] 初始化日志系统...");
+            Console.WriteLine("[NetherGate] [2/8] 初始化日志系统...");
             _loggerFactory = InitializeLogging(_config.Logging);
             _logger = _loggerFactory.CreateLogger("NetherGate");
 
@@ -94,28 +100,47 @@ class Program
             _logger.Info($".NET 版本: {Environment.Version}");
 
             // 3. 初始化事件总线
-            _logger.Info("[3/7] 初始化事件总线...");
+            _logger.Info("[3/8] 初始化事件总线...");
             _eventBus = InitializeEventBus();
 
             // 4. 初始化目录结构
-            _logger.Info("[4/7] 初始化目录结构...");
+            _logger.Info("[4/8] 初始化目录结构...");
             InitializeDirectories(_config);
 
             // 5. 初始化命令系统
-            _logger.Info("[5/7] 初始化命令系统...");
+            _logger.Info("[5/8] 初始化命令系统...");
             _commandManager = InitializeCommandManager();
 
             // 6. 初始化 SMP 客户端
-            _logger.Info("[6/7] 初始化 SMP 客户端...");
+            _logger.Info("[6/8] 初始化 SMP 客户端...");
             _smpClient = InitializeSmpClient(_config);
 
-            // 7. 显示配置摘要
-            _logger.Info("[7/7] 配置摘要:");
+            // 7. 初始化插件管理器（WebSocket 服务器依赖它）
+            _logger.Info("[7/8] 初始化插件管理器...");
+            _pluginManager = new PluginManager(
+                _loggerFactory!,
+                _eventBus!,
+                _smpClient!,
+                _commandManager!,
+                null, // RconClient - 暂时传 null，未来如果需要可以初始化
+                _config!.Plugins.Directory,
+                "config"
+            );
+
+            // 8. 初始化 WebSocket 服务器（需要 PluginManager）
+            _logger.Info("[8/8] 初始化 WebSocket 服务器...");
+            _wsServer = InitializeWebSocketServer(_wsConfig, _pluginManager);
+
+            // 显示配置摘要
+            _logger.Info("配置摘要:");
             DisplayConfigSummary(_config);
 
             _logger.Info("========================================");
             _logger.Info("NetherGate 基础框架启动完成");
             _logger.Info("========================================");
+
+            // 从这里开始计时（基础框架初始化完成，准备启动服务器和加载插件）
+            startTime = DateTime.Now;
 
             // 测试 SMP 连接（如果配置启用）
             if (_config.ServerConnection.AutoConnect)
@@ -125,14 +150,23 @@ class Program
                 await ConnectSmpAsync();
             }
 
+            // 启动 WebSocket 服务器（如果配置启用）
+            if (_wsConfig!.Enabled)
+            {
+                _logger.Info("");
+                _logger.Info("启动 WebSocket 服务器...");
+                await StartWebSocketServerAsync();
+            }
+
             // 加载插件
             _logger.Info("");
             await LoadPluginsAsync();
 
-            // 计算启动耗时
-            var elapsedMs = (DateTime.Now - startTime).TotalMilliseconds;
+            // 计算启动耗时（从基础框架启动完成到全部加载完毕）
+            var elapsedSeconds = (DateTime.Now - startTime).TotalSeconds;
             _logger.Info("");
-            _logger.Info($"NetherGate 启动完毕（耗时: {elapsedMs:F0} 毫秒），输入 'help' 查看可用命令");
+            _logger.Info($"NetherGate 启动完毕（耗时: {elapsedSeconds:F3} 秒）");
+            _logger.Info("控制台输入 'help' 或游戏内输入 '#help' 查看可用命令");
 
             // 启动命令循环
             await RunCommandLoopAsync();
@@ -143,12 +177,28 @@ class Program
             await ShutdownAsync();
 
             _logger.Info("已安全退出");
+            
+            // 等待用户按键后关闭（方便查看输出和错误信息）
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("按任意键关闭窗口...");
+            Console.ResetColor();
+            Console.ReadKey(true);
+            
             return 0;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[NetherGate] 启动失败: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
+            
+            // 等待用户按键后关闭（方便查看错误信息）
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("按任意键关闭窗口...");
+            Console.ResetColor();
+            Console.ReadKey(true);
+            
             return 1;
         }
     }
@@ -250,6 +300,65 @@ class Program
     }
 
     /// <summary>
+    /// 初始化 WebSocket 服务器（需要在插件管理器初始化之后调用）
+    /// </summary>
+    static WebSocketServer InitializeWebSocketServer(WebSocketConfig config, PluginManager pluginManager)
+    {
+        var wsLogger = _loggerFactory!.CreateLogger("WebSocket");
+        
+        // 注意：WebSocketServer 会在构造函数中创建 WebSocketMessageHandler
+        // 但我们需要先创建一个临时的服务器引用，然后在构造 MessageHandler 时传入
+        // 这里采用延迟初始化的方式
+        WebSocketServer? wsServer = null;
+        
+        var playerDataReader = new NetherGate.Core.Data.PlayerDataReader(_config!.ServerProcess.Server.WorkingDirectory, wsLogger);
+        var worldDataReader = new NetherGate.Core.Data.WorldDataReader(_config!.ServerProcess.Server.WorkingDirectory, wsLogger);
+        
+        // 创建临时占位的 WebSocketServer（后面会替换）
+        var tempServer = new WebSocketServer(
+            config,
+            wsLogger,
+            new WebSocketMessageHandler(
+                config,
+                wsLogger,
+                _loggerFactory!,
+                _eventBus!,
+                _smpClient,
+                playerDataReader,
+                worldDataReader,
+                () => pluginManager.GetAllPluginContainers(),
+                null! // 临时传 null，创建后会设置
+            )
+        );
+        
+        // 设置 MessageHandler 的 Server 引用
+        var messageHandlerField = typeof(WebSocketMessageHandler).GetField("_server", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (messageHandlerField != null)
+        {
+            var messageHandler = typeof(WebSocketServer).GetField("_messageHandler",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(tempServer);
+            messageHandlerField.SetValue(messageHandler, tempServer);
+        }
+
+        wsServer = tempServer;
+
+        _logger?.Debug("WebSocket 服务器初始化完成");
+        
+        // 如果配置启用，则启动服务器
+        if (config.Enabled)
+        {
+            _logger?.Info($"WebSocket 服务器将在端口 {config.Port} 上启动");
+        }
+        else
+        {
+            _logger?.Info("WebSocket 服务器已禁用");
+        }
+
+        return wsServer;
+    }
+
+    /// <summary>
     /// 初始化目录结构
     /// </summary>
     static void InitializeDirectories(NetherGateConfig config)
@@ -321,6 +430,16 @@ class Program
         _logger?.Info($"  日志监听器: {(config.LogListener.Enabled ? "[启用]" : "[禁用]")}");
         _logger?.Info($"  插件目录: {config.Plugins.Directory}");
         _logger?.Info($"  日志级别: {config.Logging.Level}");
+        
+        if (_wsConfig != null)
+        {
+            _logger?.Info($"  WebSocket 服务器: {(_wsConfig.Enabled ? "[启用]" : "[禁用]")}");
+            if (_wsConfig.Enabled)
+            {
+                _logger?.Info($"    - 端口: {_wsConfig.Port}");
+                _logger?.Info($"    - 认证: {(_wsConfig.Authentication.Enabled ? "启用" : "禁用")}");
+            }
+        }
     }
 
     /// <summary>
@@ -381,21 +500,21 @@ class Program
     {
         try
         {
-            // 初始化插件管理器
-            _pluginManager = new PluginManager(
-                _loggerFactory!,
-                _eventBus!,
-                _smpClient!,
-                _commandManager!,
-                _config!.Plugins.Directory,
-                "config"
-            );
+            // 插件管理器已在初始化阶段创建，这里直接加载插件
+            if (_pluginManager == null)
+            {
+                _logger?.Error("插件管理器未初始化");
+                return;
+            }
 
             // 加载所有插件
             await _pluginManager.LoadAllPluginsAsync();
 
             // 注册需要 PluginManager 的内置命令
-            _commandManager!.RegisterCommand(new PluginsCommand(_pluginManager));
+            var pluginCommandLogger = _loggerFactory!.CreateLogger("PluginCommand");
+            var pluginCommand = new PluginCommand(_pluginManager, pluginCommandLogger);
+            _commandManager!.RegisterCommand(pluginCommand);
+            _commandManager.RegisterCommand(new PluginsCommand(pluginCommand));
             
             // 注册需要 SMP API 的内置命令
             var statusLogger = _loggerFactory!.CreateLogger("StatusCommand");
@@ -462,18 +581,47 @@ class Program
     }
 
     /// <summary>
+    /// 启动 WebSocket 服务器
+    /// </summary>
+    static async Task StartWebSocketServerAsync()
+    {
+        if (_wsServer == null)
+        {
+            _logger?.Error("WebSocket 服务器未初始化");
+            return;
+        }
+
+        try
+        {
+            await _wsServer.StartAsync();
+            _logger?.Info($"WebSocket 服务器已启动: {_wsConfig!.Host}:{_wsConfig.Port}");
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error($"启动 WebSocket 服务器失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// 关闭并清理资源
     /// </summary>
     static async Task ShutdownAsync()
     {
-        // 1. 卸载插件
+        // 1. 停止 WebSocket 服务器
+        if (_wsServer != null)
+        {
+            _logger?.Info("停止 WebSocket 服务器...");
+            await _wsServer.StopAsync();
+        }
+
+        // 2. 卸载插件
         if (_pluginManager != null)
         {
             _logger?.Info("卸载插件...");
             await _pluginManager.UnloadAllPluginsAsync();
         }
 
-        // 2. 断开 SMP 连接
+        // 3. 断开 SMP 连接
         if (_smpClient != null)
         {
             _logger?.Info("断开 SMP 连接...");
@@ -481,7 +629,7 @@ class Program
             _smpClient.Dispose();
         }
 
-        // 3. 清理事件总线
+        // 4. 清理事件总线
         if (_eventBus != null)
         {
             _eventBus.ClearAllSubscriptions();

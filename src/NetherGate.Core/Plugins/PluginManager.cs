@@ -2,12 +2,15 @@ using NetherGate.API.Configuration;
 using NetherGate.API.Data;
 using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
+using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
 using NetherGate.API.Monitoring;
+using NetherGate.API.Network;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
 using NetherGate.Core.Data;
 using NetherGate.Core.FileSystem;
+using NetherGate.Core.GameDisplay;
 using NetherGate.Core.Monitoring;
 
 namespace NetherGate.Core.Plugins;
@@ -27,6 +30,7 @@ public class PluginManager
     private readonly Dictionary<string, PluginContainer> _plugins = new();
     private readonly object _lock = new();
     private readonly DependencyManagementConfig _depConfig = new();
+    private readonly IRconClient? _rconClient;
     
     // 本地功能服务（通过懒加载初始化）
     private IFileWatcher? _fileWatcher;
@@ -35,6 +39,9 @@ public class PluginManager
     private IPerformanceMonitor? _performanceMonitor;
     private IPlayerDataReader? _playerDataReader;
     private IWorldDataReader? _worldDataReader;
+    private INbtDataWriter? _nbtDataWriter;
+    private INetworkEventListener? _networkEventListener;
+    private IGameDisplayApi? _gameDisplayApi;
     private readonly string _serverDirectory;
 
     public PluginManager(
@@ -42,6 +49,7 @@ public class PluginManager
         IEventBus eventBus,
         ISmpApi smpApi,
         ICommandManager commandManager,
+        IRconClient? rconClient,
         string pluginsDirectory,
         string configDirectory,
         string globalLibPath = "lib",
@@ -52,6 +60,7 @@ public class PluginManager
         _eventBus = eventBus;
         _smpApi = smpApi;
         _commandManager = commandManager;
+        _rconClient = rconClient;
         _pluginLoader = new PluginLoader(_logger, pluginsDirectory, configDirectory, globalLibPath);
         _serverDirectory = serverDirectory;
     }
@@ -102,6 +111,36 @@ public class PluginManager
     private IWorldDataReader GetWorldDataReader()
     {
         return _worldDataReader ??= new WorldDataReader(_serverDirectory, _logger);
+    }
+    
+    /// <summary>
+    /// 获取或创建 NBT 数据写入器
+    /// </summary>
+    private INbtDataWriter GetNbtDataWriter()
+    {
+        return _nbtDataWriter ??= new NbtDataWriter(_serverDirectory, _logger);
+    }
+    
+    /// <summary>
+    /// 获取或创建网络事件监听器
+    /// </summary>
+    private INetworkEventListener GetNetworkEventListener()
+    {
+        return _networkEventListener ??= new Network.NetworkEventListener(_logger, _eventBus);
+    }
+    
+    /// <summary>
+    /// 获取或创建游戏显示 API
+    /// </summary>
+    private IGameDisplayApi GetGameDisplayApi()
+    {
+        if (_gameDisplayApi == null && _rconClient != null)
+        {
+            _gameDisplayApi = new GameDisplayApi(_rconClient, _logger);
+        }
+        
+        // 如果 RCON 未启用，返回一个占位实现
+        return _gameDisplayApi ?? new GameDisplayApi(null!, _logger);
     }
 
     /// <summary>
@@ -226,13 +265,16 @@ public class PluginManager
                 _eventBus,
                 _smpApi,
                 _commandManager,
-                null, // RconClient - 待集成
+                _rconClient,
                 GetFileWatcher(),
                 GetServerFileAccess(),
                 GetBackupManager(),
                 GetPerformanceMonitor(),
                 GetPlayerDataReader(),
-                GetWorldDataReader()
+                GetWorldDataReader(),
+                GetNbtDataWriter(),
+                GetNetworkEventListener(),
+                GetGameDisplayApi()
             );
 
             // 通过反射设置 Context 属性（如果存在）
@@ -457,6 +499,74 @@ public class PluginManager
         catch (Exception ex)
         {
             _logger.Error($"插件重载失败: {container.Name}", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 启用插件（公共 API）
+    /// </summary>
+    public async Task<bool> EnablePluginAsync(string pluginId)
+    {
+        PluginContainer? container;
+        
+        lock (_lock)
+        {
+            if (!_plugins.TryGetValue(pluginId, out container))
+            {
+                _logger.Warning($"插件不存在: {pluginId}");
+                return false;
+            }
+        }
+
+        if (container.State == PluginState.Enabled)
+        {
+            _logger.Warning($"插件已启用: {container.Name}");
+            return true;
+        }
+
+        try
+        {
+            await EnablePluginAsync(container);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"启用插件失败: {container.Name}", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 禁用插件（公共 API）
+    /// </summary>
+    public async Task<bool> DisablePluginAsync(string pluginId)
+    {
+        PluginContainer? container;
+        
+        lock (_lock)
+        {
+            if (!_plugins.TryGetValue(pluginId, out container))
+            {
+                _logger.Warning($"插件不存在: {pluginId}");
+                return false;
+            }
+        }
+
+        if (container.State != PluginState.Enabled)
+        {
+            _logger.Warning($"插件未启用: {container.Name}");
+            return true;
+        }
+
+        try
+        {
+            await DisablePluginAsync(container);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"禁用插件失败: {container.Name}", ex);
             return false;
         }
     }

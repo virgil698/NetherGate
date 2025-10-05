@@ -37,7 +37,6 @@ do_publish() {
         --self-contained true \
         --output publish/$RID \
         -p:PublishSingleFile=true \
-        -p:PublishTrimmed=true \
         -p:EnableCompressionInSingleFile=true
     
     # Linux/macOS 需要执行权限

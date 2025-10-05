@@ -10,6 +10,7 @@ public abstract record ServerEvent
 
 /// <summary>
 /// 服务器进程启动事件
+/// 进程已启动但服务器尚未完全就绪
 /// </summary>
 public record ServerProcessStartedEvent : ServerEvent
 {
@@ -17,7 +18,31 @@ public record ServerProcessStartedEvent : ServerEvent
 }
 
 /// <summary>
+/// 服务器启动完成事件
+/// 服务器已完全启动并准备接受玩家连接
+/// 通过日志解析 "Done (X.XXXs)!" 触发
+/// </summary>
+public record ServerReadyEvent : ServerEvent
+{
+    /// <summary>
+    /// 启动耗时（秒）
+    /// </summary>
+    public double StartupTimeSeconds { get; init; }
+}
+
+/// <summary>
+/// 服务器准备关闭事件（从日志解析）
+/// 服务器收到停止命令，正在执行关闭流程
+/// 通过日志解析 "Stopping server" 触发
+/// 注意: SMP 协议也会推送 ServerStoppingEvent，但基类不同
+/// </summary>
+public record ServerShuttingDownEvent : ServerEvent
+{
+}
+
+/// <summary>
 /// 服务器进程停止事件
+/// 服务器进程已完全退出
 /// </summary>
 public record ServerProcessStoppedEvent : ServerEvent
 {

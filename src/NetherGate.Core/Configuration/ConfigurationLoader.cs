@@ -67,16 +67,20 @@ public class ConfigurationLoader
             SaveConfig(configPath, defaultConfig, ConfigFormat.Yaml);
             
             Console.WriteLine($"[NetherGate] 已创建默认配置文件: {configPath} (YAML 格式)");
-            Console.WriteLine("[NetherGate] 注意: 请根据实际情况编辑配置文件后重新启动");
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("⚠️  首次启动提醒：");
+            Console.WriteLine("   程序将使用默认配置运行，建议稍后根据实际情况修改配置文件");
+            Console.ResetColor();
             Console.WriteLine();
             Console.WriteLine("重要配置项：");
             Console.WriteLine("  1. server_connection.secret - 修改为 40 字符的密钥");
             Console.WriteLine("  2. rcon.password - 修改 RCON 密码");
             Console.WriteLine("  3. server_process.server.working_directory - Minecraft 服务器目录");
             Console.WriteLine();
-            Console.WriteLine("按任意键退出...");
-            Console.ReadKey();
-            Environment.Exit(0);
+            
+            // 不再强制退出，使用默认配置继续运行
+            return defaultConfig;
         }
 
         // 加载配置

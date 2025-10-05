@@ -117,6 +117,20 @@ public class CommandManager : ICommandManager
             return CommandResult.Fail("命令不能为空");
         }
 
+        // 处理 # 前缀（框架命令前缀）
+        // 支持在控制台直接输入（不带前缀）或在游戏内输入（带 # 前缀）
+        commandLine = commandLine.TrimStart();
+        if (commandLine.StartsWith("#"))
+        {
+            commandLine = commandLine.Substring(1).TrimStart();
+        }
+
+        // 如果是游戏原生命令（以 / 开头），不处理
+        if (commandLine.StartsWith("/"))
+        {
+            return CommandResult.Fail("游戏原生命令请直接在游戏内执行，NetherGate 命令请使用 # 前缀");
+        }
+
         // 解析命令行
         var parts = ParseCommandLine(commandLine);
         if (parts.Length == 0)
@@ -254,6 +268,13 @@ public class CommandManager : ICommandManager
                 }
             }
             return results;
+        }
+
+        // 处理 # 前缀
+        var hasPrefix = partialCommandLine.TrimStart().StartsWith("#");
+        if (hasPrefix)
+        {
+            partialCommandLine = partialCommandLine.TrimStart().Substring(1).TrimStart();
         }
 
         var parts = ParseCommandLine(partialCommandLine);

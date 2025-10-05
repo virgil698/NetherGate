@@ -232,3 +232,25 @@ public record SmpReconnectingEvent : SmpEvent
     public int MaxAttempts { get; init; }
 }
 
+// ========== 服务器心跳事件 ==========
+
+/// <summary>
+/// 服务器心跳事件
+/// 定期接收服务器状态更新（通过配置 status-heartbeat-interval 启用）
+/// </summary>
+public record ServerHeartbeatEvent : SmpEvent
+{
+    public override string EventType => "server_heartbeat";
+    
+    /// <summary>
+    /// 服务器当前状态
+    /// </summary>
+    public ServerState Status { get; init; } = new();
+    
+    /// <summary>
+    /// 心跳间隔（秒）
+    /// 对应配置项 status-heartbeat-interval
+    /// </summary>
+    public int IntervalSeconds { get; init; }
+}
+

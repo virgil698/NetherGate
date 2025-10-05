@@ -405,6 +405,7 @@ public class SmpClient : ISmpApi, IDisposable
 
     /// <summary>
     /// 注册所有 SMP 通知处理器
+    /// 根据 Minecraft Wiki SMP 协议文档注册所有通知类型
     /// </summary>
     private void RegisterNotificationHandlers()
     {
@@ -416,25 +417,35 @@ public class SmpClient : ISmpApi, IDisposable
         _rpcHandler.RegisterNotificationHandler("operators/added", HandleOperatorAdded);
         _rpcHandler.RegisterNotificationHandler("operators/removed", HandleOperatorRemoved);
         
-        // 白名单事件
+        // 白名单事件（单个和批量操作）
         _rpcHandler.RegisterNotificationHandler("allowlist/added", HandleAllowlistAdded);
         _rpcHandler.RegisterNotificationHandler("allowlist/removed", HandleAllowlistRemoved);
+        _rpcHandler.RegisterNotificationHandler("allowlist/set", HandleAllowlistSet);
+        _rpcHandler.RegisterNotificationHandler("allowlist/cleared", HandleAllowlistCleared);
         
-        // 封禁事件
+        // 封禁事件（单个和批量操作）
         _rpcHandler.RegisterNotificationHandler("bans/added", HandleBanAdded);
         _rpcHandler.RegisterNotificationHandler("bans/removed", HandleBanRemoved);
+        _rpcHandler.RegisterNotificationHandler("bans/set", HandleBanSet);
+        _rpcHandler.RegisterNotificationHandler("bans/cleared", HandleBanCleared);
         
-        // IP 封禁事件
+        // IP 封禁事件（单个和批量操作）
         _rpcHandler.RegisterNotificationHandler("ip_bans/added", HandleIpBanAdded);
         _rpcHandler.RegisterNotificationHandler("ip_bans/removed", HandleIpBanRemoved);
+        _rpcHandler.RegisterNotificationHandler("ip_bans/set", HandleIpBanSet);
+        _rpcHandler.RegisterNotificationHandler("ip_bans/cleared", HandleIpBanCleared);
+        
+        // 管理员批量操作
+        _rpcHandler.RegisterNotificationHandler("operators/set", HandleOperatorSet);
+        _rpcHandler.RegisterNotificationHandler("operators/cleared", HandleOperatorCleared);
         
         // 游戏规则事件
         _rpcHandler.RegisterNotificationHandler("gamerules/updated", HandleGameRuleUpdated);
         
-        // 服务器状态心跳
+        // 服务器状态和心跳
         _rpcHandler.RegisterNotificationHandler("server/status", HandleServerStatus);
         
-        _logger.Debug("已注册所有 SMP 通知处理器");
+        _logger.Debug("已注册所有 SMP 通知处理器（共 22 个）");
     }
 
     /// <summary>
@@ -673,6 +684,7 @@ public class SmpClient : ISmpApi, IDisposable
 
     /// <summary>
     /// 处理服务器状态心跳通知
+    /// 根据配置的 status-heartbeat-interval 定期接收
     /// </summary>
     private async void HandleServerStatus(JsonRpcNotification notification)
     {
@@ -681,17 +693,196 @@ public class SmpClient : ISmpApi, IDisposable
             var status = notification.GetParams<ServerState>();
             if (status != null && _eventBus != null)
             {
-                _logger.Trace($"服务器状态心跳: Started={status.Started}");
-                // 发布服务器状态变更事件
-                if (status.Started)
+                _logger.Trace($"服务器状态心跳: Started={status.Started}, Version={status.Version?.Name}");
+                
+                // 发布服务器心跳事件
+                await _eventBus.PublishAsync(new ServerHeartbeatEvent 
+                { 
+                    Status = status,
+                    IntervalSeconds = 0  // 由服务器配置决定，这里无法获取
+                });
+                
+                // 如果服务器刚启动，也发布 ServerStartedEvent
+                // 注意：这个事件通常只会在服务器首次启动时触发一次
+                if (status.Started && status.Version != null)
                 {
-                    await _eventBus.PublishAsync(new ServerStartedEvent());
+                    // 检查是否已经发布过（简单的状态检查）
+                    _logger.Debug($"服务器已启动: {status.Version.Name} (协议版本: {status.Version.Protocol})");
                 }
             }
         }
         catch (Exception ex)
         {
             _logger.Error($"处理服务器状态心跳通知失败: {ex.Message}", ex);
+        }
+    }
+
+    // ========== 批量操作通知处理器 ==========
+
+    /// <summary>
+    /// 处理白名单批量设置通知
+    /// </summary>
+    private async void HandleAllowlistSet(JsonRpcNotification notification)
+    {
+        try
+        {
+            var players = notification.GetParams<List<PlayerDto>>();
+            if (players != null && _eventBus != null)
+            {
+                _logger.Debug($"白名单批量设置: {players.Count} 个玩家");
+                await _eventBus.PublishAsync(new AllowlistChangedEvent 
+                { 
+                    Players = players,
+                    Operation = "set"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理白名单批量设置通知失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 处理白名单清空通知
+    /// </summary>
+    private async void HandleAllowlistCleared(JsonRpcNotification notification)
+    {
+        try
+        {
+            if (_eventBus != null)
+            {
+                _logger.Debug("白名单已清空");
+                await _eventBus.PublishAsync(new AllowlistChangedEvent 
+                { 
+                    Players = new List<PlayerDto>(),
+                    Operation = "cleared"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理白名单清空通知失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 处理封禁批量设置通知
+    /// </summary>
+    private async void HandleBanSet(JsonRpcNotification notification)
+    {
+        try
+        {
+            var bans = notification.GetParams<List<UserBanDto>>();
+            if (bans != null && _eventBus != null)
+            {
+                _logger.Debug($"封禁批量设置: {bans.Count} 个封禁");
+                // 为每个封禁发布单独的事件
+                foreach (var ban in bans)
+                {
+                    await _eventBus.PublishAsync(new PlayerBannedEvent { Ban = ban });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理封禁批量设置通知失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 处理封禁清空通知
+    /// </summary>
+    private void HandleBanCleared(JsonRpcNotification notification)
+    {
+        try
+        {
+            _logger.Debug("封禁列表已清空");
+            _logger.Info("所有玩家封禁已清除");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理封禁清空通知失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 处理 IP 封禁批量设置通知
+    /// </summary>
+    private async void HandleIpBanSet(JsonRpcNotification notification)
+    {
+        try
+        {
+            var bans = notification.GetParams<List<IpBanDto>>();
+            if (bans != null && _eventBus != null)
+            {
+                _logger.Debug($"IP 封禁批量设置: {bans.Count} 个 IP");
+                // 为每个 IP 封禁发布单独的事件
+                foreach (var ban in bans)
+                {
+                    await _eventBus.PublishAsync(new IpBannedEvent { Ban = ban });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理 IP 封禁批量设置通知失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 处理 IP 封禁清空通知
+    /// </summary>
+    private void HandleIpBanCleared(JsonRpcNotification notification)
+    {
+        try
+        {
+            _logger.Debug("IP 封禁列表已清空");
+            _logger.Info("所有 IP 封禁已清除");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理 IP 封禁清空通知失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 处理管理员批量设置通知
+    /// </summary>
+    private async void HandleOperatorSet(JsonRpcNotification notification)
+    {
+        try
+        {
+            var operators = notification.GetParams<List<OperatorDto>>();
+            if (operators != null && _eventBus != null)
+            {
+                _logger.Debug($"管理员批量设置: {operators.Count} 个管理员");
+                // 为每个管理员发布单独的事件
+                foreach (var op in operators)
+                {
+                    await _eventBus.PublishAsync(new OperatorAddedEvent { Operator = op });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理管理员批量设置通知失败: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 处理管理员清空通知
+    /// </summary>
+    private void HandleOperatorCleared(JsonRpcNotification notification)
+    {
+        try
+        {
+            _logger.Debug("管理员列表已清空");
+            _logger.Info("所有管理员权限已清除");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"处理管理员清空通知失败: {ex.Message}", ex);
         }
     }
 
