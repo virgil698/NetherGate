@@ -69,7 +69,9 @@ jobs:
     
     # 发布到 NuGet.org
     - name: Publish to NuGet.org
-      if: secrets.NUGET_API_KEY != ''
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      if: env.NUGET_API_KEY != ''
       run: |
         if [ "${{ inputs.force_publish }}" == "true" ]; then
           dotnet nuget push nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
