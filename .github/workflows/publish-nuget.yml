@@ -1,0 +1,105 @@
+name: Publish NuGet Package
+
+on:
+  # 当创建 Release 时自动发布
+  release:
+    types: [published]
+  
+  # 定期发布（每周一凌晨 2 点）
+  schedule:
+    - cron: '0 2 * * 1'  # 每周一 02:00 UTC (北京时间 10:00)
+  
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (e.g., 1.0.0)'
+        required: false
+        type: string
+      force_publish:
+        description: 'Force publish even if version exists'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+    
+    # 从 .csproj 读取当前版本号
+    - name: Extract version from project file
+      id: get_version
+      run: |
+        VERSION=$(grep -oP '<Version>\K[^<]+' src/NetherGate.API/NetherGate.API.csproj)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Detected version: $VERSION"
+    
+    # 决定使用哪个版本号
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "release" ]; then
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"  # 移除 v 前缀
+        elif [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+          VERSION="${{ inputs.version }}"
+        else
+          VERSION="${{ steps.get_version.outputs.version }}"
+        fi
+        echo "final_version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Using version: $VERSION"
+        
+    - name: Restore dependencies
+      run: dotnet restore src/NetherGate.API/NetherGate.API.csproj
+      
+    - name: Build
+      run: dotnet build src/NetherGate.API/NetherGate.API.csproj -c Release --no-restore
+      
+    - name: Pack NuGet package
+      run: dotnet pack src/NetherGate.API/NetherGate.API.csproj -c Release -o nupkg --include-symbols --include-source /p:Version=${{ steps.version.outputs.final_version }}
+    
+    # 发布到 NuGet.org
+    - name: Publish to NuGet.org
+      if: secrets.NUGET_API_KEY != ''
+      run: |
+        if [ "${{ inputs.force_publish }}" == "true" ]; then
+          dotnet nuget push nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+        else
+          dotnet nuget push nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        fi
+      continue-on-error: true
+        
+    # 发布到 GitHub Packages
+    - name: Publish to GitHub Packages
+      run: dotnet nuget push nupkg/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --skip-duplicate
+      continue-on-error: true
+        
+    # 上传构建产物
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages-${{ steps.version.outputs.final_version }}
+        path: nupkg/*.nupkg
+    
+    # 发布总结
+    - name: Publish Summary
+      run: |
+        echo "## 📦 NuGet Package Published" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Package**: NetherGate.API" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.version.outputs.final_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📍 Package Links" >> $GITHUB_STEP_SUMMARY
+        echo "- [NuGet.org](https://www.nuget.org/packages/NetherGate.API/${{ steps.version.outputs.final_version }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [GitHub Packages](https://github.com/${{ github.repository }}/packages)" >> $GITHUB_STEP_SUMMARY
+

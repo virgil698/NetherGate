@@ -35,6 +35,7 @@ packages/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+nupkg/
 
 # Test Results
 [Tt]est[Rr]esult*/

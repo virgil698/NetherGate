@@ -152,13 +152,18 @@ server_process:
 
 ## 🔌 **5 分钟创建第一个插件**
 
-### **1. 创建项目**
+### **1. 安装 NuGet 包**
+
+NetherGate.API 已发布到 NuGet.org，可以直接安装：
 
 ```bash
 dotnet new classlib -n MyPlugin
 cd MyPlugin
 dotnet add package NetherGate.API
 ```
+
+[![NuGet](https://img.shields.io/nuget/v/NetherGate.API.svg)](https://www.nuget.org/packages/NetherGate.API/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/NetherGate.API.svg)](https://www.nuget.org/packages/NetherGate.API/)
 
 ### **2. 编写代码**
 

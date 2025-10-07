@@ -4,10 +4,30 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    
+    <!-- NuGet Package Metadata -->
+    <PackageId>NetherGate.API</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>virgil698</Authors>
+    <Company>BlockBridge</Company>
+    <Description>Plugin API for NetherGate - A Minecraft server management platform. Provides interfaces and models for developing NetherGate plugins.</Description>
+    <PackageProjectUrl>https://github.com/virgil698/NetherGate</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/virgil698/NetherGate</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>minecraft;server;management;plugin;api;rcon;smp</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="fNbt" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
