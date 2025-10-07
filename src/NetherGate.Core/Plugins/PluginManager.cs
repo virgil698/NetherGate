@@ -40,6 +40,9 @@ public class PluginManager
     private IPlayerDataReader? _playerDataReader;
     private IWorldDataReader? _worldDataReader;
     private INbtDataWriter? _nbtDataWriter;
+    private IItemComponentReader? _itemComponentReader;
+    private IItemComponentWriter? _itemComponentWriter;
+    private IItemComponentConverter? _itemComponentConverter;
     private INetworkEventListener? _networkEventListener;
     private IGameDisplayApi? _gameDisplayApi;
     private readonly string _serverDirectory;
@@ -141,6 +144,30 @@ public class PluginManager
         
         // 如果 RCON 未启用，返回一个占位实现
         return _gameDisplayApi ?? new GameDisplayApi(null!, _logger);
+    }
+    
+    /// <summary>
+    /// 获取或创建物品组件读取器
+    /// </summary>
+    private IItemComponentReader GetItemComponentReader()
+    {
+        return _itemComponentReader ??= new ItemComponentReader(_serverDirectory, _rconClient, _logger);
+    }
+    
+    /// <summary>
+    /// 获取或创建物品组件写入器
+    /// </summary>
+    private IItemComponentWriter GetItemComponentWriter()
+    {
+        return _itemComponentWriter ??= new ItemComponentWriter(_rconClient!, _logger, (ItemComponentReader)GetItemComponentReader());
+    }
+    
+    /// <summary>
+    /// 获取或创建物品组件转换器
+    /// </summary>
+    private IItemComponentConverter GetItemComponentConverter()
+    {
+        return _itemComponentConverter ??= new ItemComponentConverter(_logger, (ItemComponentReader)GetItemComponentReader(), (PlayerDataReader)GetPlayerDataReader());
     }
 
     /// <summary>
@@ -273,6 +300,9 @@ public class PluginManager
                 GetPlayerDataReader(),
                 GetWorldDataReader(),
                 GetNbtDataWriter(),
+                GetItemComponentReader(),
+                GetItemComponentWriter(),
+                GetItemComponentConverter(),
                 GetNetworkEventListener(),
                 GetGameDisplayApi()
             );

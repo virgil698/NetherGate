@@ -29,6 +29,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly IPlayerDataReader _playerDataReader;
     private readonly IWorldDataReader _worldDataReader;
     private readonly INbtDataWriter _nbtDataWriter;
+    private readonly IItemComponentReader _itemComponentReader;
+    private readonly IItemComponentWriter _itemComponentWriter;
+    private readonly IItemComponentConverter _itemComponentConverter;
     private readonly INetworkEventListener _networkEventListener;
     private readonly PluginMessenger _messenger;
     private readonly IGameDisplayApi _gameDisplay;
@@ -50,6 +53,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     public IPlayerDataReader PlayerDataReader => _playerDataReader;
     public IWorldDataReader WorldDataReader => _worldDataReader;
     public INbtDataWriter NbtDataWriter => _nbtDataWriter;
+    public IItemComponentReader ItemComponentReader => _itemComponentReader;
+    public IItemComponentWriter ItemComponentWriter => _itemComponentWriter;
+    public IItemComponentConverter ItemComponentConverter => _itemComponentConverter;
     public INetworkEventListener NetworkEventListener => _networkEventListener;
     public IPluginMessenger Messenger => _messenger;
     public IGameDisplayApi GameDisplay => _gameDisplay;
@@ -77,6 +83,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         IPlayerDataReader playerDataReader,
         IWorldDataReader worldDataReader,
         INbtDataWriter nbtDataWriter,
+        IItemComponentReader itemComponentReader,
+        IItemComponentWriter itemComponentWriter,
+        IItemComponentConverter itemComponentConverter,
         INetworkEventListener networkEventListener,
         IGameDisplayApi gameDisplay)
     {
@@ -92,6 +101,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         _playerDataReader = playerDataReader;
         _worldDataReader = worldDataReader;
         _nbtDataWriter = nbtDataWriter;
+        _itemComponentReader = itemComponentReader;
+        _itemComponentWriter = itemComponentWriter;
+        _itemComponentConverter = itemComponentConverter;
         _networkEventListener = networkEventListener;
         _gameDisplay = gameDisplay;
 

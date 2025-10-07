@@ -130,6 +130,24 @@ public interface IPluginContext
     INbtDataWriter NbtDataWriter { get; }
 
     /// <summary>
+    /// 物品组件读取器（Minecraft 1.20.5+）
+    /// 用于读取使用数据组件格式存储的物品数据
+    /// </summary>
+    IItemComponentReader ItemComponentReader { get; }
+
+    /// <summary>
+    /// 物品组件写入器（Minecraft 1.20.5+）
+    /// 用于修改使用数据组件格式存储的物品数据
+    /// </summary>
+    IItemComponentWriter ItemComponentWriter { get; }
+
+    /// <summary>
+    /// NBT 到数据组件转换器
+    /// 用于在旧版 NBT 格式和新版组件格式之间转换
+    /// </summary>
+    IItemComponentConverter ItemComponentConverter { get; }
+
+    /// <summary>
     /// 网络事件监听器
     /// 用于监听 Minecraft 服务器的网络层事件
     /// </summary>

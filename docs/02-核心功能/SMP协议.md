@@ -665,4 +665,3 @@ private async Task<List<PlayerInfo>> GetPlayersViaRconAsync()
 
 **文档维护者：** NetherGate 开发团队  
 **最后更新：** 2025-10-05  
-**基于：** Minecraft Java 版 1.21.9 (快照 25w35a)
