@@ -67,16 +67,14 @@ NetherGate 让插件开发变得**简单而强大**：
 
 NetherGate 支持所有开放 **RCON + SMP 协议**的 Minecraft 服务端，包括但不限于：
 
-| 服务端类型 | 说明 |
-|----------|------|
-| **Vanilla** | 原版服务端 |
-| **Paper** | 高性能优化服务端 |
-| **Purpur** | Paper 分支，更多自定义选项 |
-| **Leaves** | 高性能国产服务端 |
-| **Leaf** | Leaves 分支服务端 |
-| **Forge** | Mod 加载器服务端 |
-| **Fabric** | 轻量级 Mod 加载器 |
-| **NeoForge** | Forge 的现代化分支 |
+- **Vanilla** (原版)
+- **Paper**
+- **Purpur**
+- **Leaves**
+- **Leaf**
+- **Forge**
+- **Fabric**
+- **NeoForge**
 
 **前置要求：**
 - ✅ 服务端需开启 **RCON** 功能（用于命令执行）
