@@ -5,7 +5,7 @@
 **🌐 现代化的 .NET Minecraft 服务器插件加载器 🌐**
 
 [![.NET Version](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dot.net)
-[![Minecraft](https://img.shields.io/badge/Minecraft-Java%201.20--1.21.9+-brightgreen?logo=minecraft)](https://minecraft.net)
+[![Minecraft](https://img.shields.io/badge/Minecraft-Java%201.21.9+-brightgreen?logo=minecraft)](https://minecraft.net)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/Coverage-100%25-success)](docs/功能覆盖率报告.md)
 
@@ -55,6 +55,32 @@ NetherGate 让插件开发变得**简单而强大**：
   - **Linux**: x64, ARM, ARM64
   - **macOS**: Intel x64, Apple Silicon ARM64
 - 📚 **文档完善**：覆盖所有功能的中文文档，丰富示例
+
+---
+
+## 🎮 **兼容性说明**
+
+### **支持的 Minecraft 版本**
+- ✅ **Java Edition 1.21.9+**（及以上版本）
+
+### **支持的服务端类型**
+
+NetherGate 支持所有开放 **RCON + SMP 协议**的 Minecraft 服务端，包括但不限于：
+
+| 服务端类型 | 说明 |
+|----------|------|
+| **Vanilla** | 原版服务端 |
+| **Paper** | 高性能优化服务端 |
+| **Purpur** | Paper 分支，更多自定义选项 |
+| **Leaves** | 高性能国产服务端 |
+| **Leaf** | Leaves 分支服务端 |
+| **Forge** | Mod 加载器服务端 |
+| **Fabric** | 轻量级 Mod 加载器 |
+| **NeoForge** | Forge 的现代化分支 |
+
+**前置要求：**
+- ✅ 服务端需开启 **RCON** 功能（用于命令执行）
+- ✅ 服务端需支持 **SMP 协议**（用于服务器管理）
 
 ---
 
