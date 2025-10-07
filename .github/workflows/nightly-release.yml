@@ -44,25 +44,51 @@ jobs:
           fi
 
   build:
-    name: Build for ${{ matrix.os }}
+    name: Build ${{ matrix.platform }}
     needs: check-commits
     if: needs.check-commits.outputs.has_commits == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
+          # Windows 平台
           - os: windows-latest
             platform: win-x64
             artifact_name: nethergate-nightly-win-x64
-            binary_ext: .exe
+            archive_ext: zip
+          - os: windows-latest
+            platform: win-x86
+            artifact_name: nethergate-nightly-win-x86
+            archive_ext: zip
+          - os: windows-latest
+            platform: win-arm64
+            artifact_name: nethergate-nightly-win-arm64
+            archive_ext: zip
+          
+          # Linux 平台
           - os: ubuntu-latest
             platform: linux-x64
             artifact_name: nethergate-nightly-linux-x64
-            binary_ext: ''
+            archive_ext: tar.gz
+          - os: ubuntu-latest
+            platform: linux-arm
+            artifact_name: nethergate-nightly-linux-arm
+            archive_ext: tar.gz
+          - os: ubuntu-latest
+            platform: linux-arm64
+            artifact_name: nethergate-nightly-linux-arm64
+            archive_ext: tar.gz
+          
+          # macOS 平台
           - os: macos-latest
             platform: osx-x64
             artifact_name: nethergate-nightly-osx-x64
-            binary_ext: ''
+            archive_ext: tar.gz
+          - os: macos-latest
+            platform: osx-arm64
+            artifact_name: nethergate-nightly-osx-arm64
+            archive_ext: tar.gz
 
     steps:
       - name: Checkout code
@@ -88,15 +114,15 @@ jobs:
             -o ./publish/${{ matrix.platform }}
 
       - name: Create archive (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: matrix.archive_ext == 'tar.gz'
         run: |
           cd ./publish/${{ matrix.platform }}
-          chmod +x NetherGate.Host${{ matrix.binary_ext }}
+          chmod +x NetherGate.Host
           tar -czf ../../${{ matrix.artifact_name }}.tar.gz *
           cd ../..
           
       - name: Create archive (Windows)
-        if: runner.os == 'Windows'
+        if: matrix.archive_ext == 'zip'
         shell: pwsh
         run: |
           cd ./publish/${{ matrix.platform }}
@@ -163,21 +189,34 @@ jobs:
           echo "" >> release_notes.md
           echo "## 📦 下载说明" >> release_notes.md
           echo "" >> release_notes.md
-          echo "请根据您的操作系统选择相应的压缩包：" >> release_notes.md
+          echo "请根据您的操作系统和架构选择相应的压缩包：" >> release_notes.md
           echo "" >> release_notes.md
-          echo "- **Windows**: \`nethergate-nightly-win-x64.zip\`" >> release_notes.md
-          echo "- **Linux**: \`nethergate-nightly-linux-x64.tar.gz\`" >> release_notes.md
-          echo "- **macOS**: \`nethergate-nightly-osx-x64.tar.gz\`" >> release_notes.md
+          echo "### Windows" >> release_notes.md
+          echo "- **x64 (64位)**: \`nethergate-nightly-win-x64.zip\` - 推荐大多数用户使用" >> release_notes.md
+          echo "- **x86 (32位)**: \`nethergate-nightly-win-x86.zip\` - 适用于 32 位系统" >> release_notes.md
+          echo "- **ARM64**: \`nethergate-nightly-win-arm64.zip\` - 适用于 ARM 架构（如骁龙 PC）" >> release_notes.md
           echo "" >> release_notes.md
-          echo "解压后运行 \`NetherGate.Host\` 即可。" >> release_notes.md
+          echo "### Linux" >> release_notes.md
+          echo "- **x64 (amd64)**: \`nethergate-nightly-linux-x64.tar.gz\` - 推荐大多数用户使用" >> release_notes.md
+          echo "- **ARM**: \`nethergate-nightly-linux-arm.tar.gz\` - 适用于 32 位 ARM（如树莓派 2/3）" >> release_notes.md
+          echo "- **ARM64 (aarch64)**: \`nethergate-nightly-linux-arm64.tar.gz\` - 适用于 64 位 ARM（如树莓派 4/5）" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### macOS" >> release_notes.md
+          echo "- **Intel (x64)**: \`nethergate-nightly-osx-x64.tar.gz\` - 适用于 Intel Mac" >> release_notes.md
+          echo "- **Apple Silicon (ARM64)**: \`nethergate-nightly-osx-arm64.tar.gz\` - 适用于 M1/M2/M3/M4 Mac" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "解压后运行 \`NetherGate.Host\` (或 \`NetherGate.Host.exe\` on Windows) 即可。" >> release_notes.md
           echo "" >> release_notes.md
           echo "---" >> release_notes.md
           echo "" >> release_notes.md
           echo "## ⚙️ 系统要求" >> release_notes.md
           echo "" >> release_notes.md
           echo "- **.NET Runtime**: 已包含在构建中（self-contained）" >> release_notes.md
-          echo "- **Minecraft**: Java Edition 1.20.x - 1.21.x" >> release_notes.md
-          echo "- **操作系统**: Windows 10+, Linux (Ubuntu 20.04+), macOS 11+" >> release_notes.md
+          echo "- **Minecraft**: Java Edition 1.20.x - 1.21.9+" >> release_notes.md
+          echo "- **操作系统**:" >> release_notes.md
+          echo "  - Windows 10+ (x64, x86, ARM64)" >> release_notes.md
+          echo "  - Linux (Ubuntu 20.04+, Debian 10+, 其他主流发行版)" >> release_notes.md
+          echo "  - macOS 11+ (Intel & Apple Silicon)" >> release_notes.md
           
           # 设置 release tag
           RELEASE_TAG="nightly-$(TZ='Asia/Shanghai' date '+%Y%m%d')"
@@ -233,9 +272,8 @@ jobs:
         run: |
           if [ "${{ needs.build.result }}" == "success" ] && [ "${{ needs.create-release.result }}" == "success" ]; then
             echo "✅ Nightly 构建成功！"
-            echo "📦 已发布到 GitHub Releases"
+            echo "📦 已发布 8 个平台构建到 GitHub Releases"
           else
             echo "❌ Nightly 构建失败"
             exit 1
           fi
-

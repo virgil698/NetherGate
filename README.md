@@ -50,7 +50,10 @@ NetherGate 让插件开发变得**简单而强大**：
   - ✅ 支持代码修改后立即生效
   - ✅ 自动卸载旧版本，加载新版本
   - ✅ 插件间依赖自动重载
-- 🌐 **跨平台**：Windows、Linux、macOS 全支持
+- 🌐 **跨平台**：支持 8 种平台架构组合
+  - **Windows**: x64, x86, ARM64
+  - **Linux**: x64, ARM, ARM64
+  - **macOS**: Intel x64, Apple Silicon ARM64
 - 📚 **文档完善**：覆盖所有功能的中文文档，丰富示例
 
 ---
@@ -59,7 +62,20 @@ NetherGate 让插件开发变得**简单而强大**：
 
 ### **1. 下载**
 
-从 [Releases](../../releases) 下载最新版本，或自行编译：
+从 [Releases](../../releases) 下载适合您系统的版本：
+
+| 操作系统 | 架构 | 文件名 |
+|---------|------|--------|
+| **Windows** | x64 (推荐) | `nethergate-nightly-win-x64.zip` |
+| Windows | x86 | `nethergate-nightly-win-x86.zip` |
+| Windows | ARM64 | `nethergate-nightly-win-arm64.zip` |
+| **Linux** | x64 (推荐) | `nethergate-nightly-linux-x64.tar.gz` |
+| Linux | ARM | `nethergate-nightly-linux-arm.tar.gz` |
+| Linux | ARM64 | `nethergate-nightly-linux-arm64.tar.gz` |
+| **macOS** | Intel x64 | `nethergate-nightly-osx-x64.tar.gz` |
+| **macOS** | Apple Silicon | `nethergate-nightly-osx-arm64.tar.gz` |
+
+或自行编译：
 
 ```bash
 git clone https://github.com/your-org/NetherGate.git
