@@ -70,6 +70,50 @@ public record ServerLogEvent : ServerEvent
 }
 
 /// <summary>
+/// RCON 已连接
+/// </summary>
+public record RconConnectedEvent : ServerEvent
+{
+}
+
+/// <summary>
+/// RCON 已断开
+/// </summary>
+public record RconDisconnectedEvent : ServerEvent
+{
+    public string? Reason { get; init; }
+}
+
+/// <summary>
+/// 通过统一执行器执行的命令及其回显
+/// </summary>
+public record ServerCommandResponseEvent : ServerEvent
+{
+    public string Command { get; init; } = string.Empty;
+    public bool Success { get; init; }
+    public string? Response { get; init; }
+    public string Channel { get; init; } = "rcon"; // rcon | stdin
+}
+
+/// <summary>
+/// 系统健康状态事件（周期性发布）
+/// </summary>
+public record SystemHealthEvent : ServerEvent
+{
+    public bool ServerProcessRunning { get; init; }
+    public bool ServerReady { get; init; }
+    public bool RconConnected { get; init; }
+    public bool SmpConnected { get; init; }
+    public bool WebSocketRunning { get; init; }
+    public int PluginsLoaded { get; init; }
+    public int? PlayerCount { get; init; }
+    public double? Tps1m { get; init; }
+    public double? Tps5m { get; init; }
+    public double? Tps15m { get; init; }
+    public double? MsptAverage { get; init; }
+}
+
+/// <summary>
 /// 玩家聊天事件（从日志解析）
 /// </summary>
 public record PlayerChatEvent : ServerEvent

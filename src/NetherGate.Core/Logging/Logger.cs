@@ -117,8 +117,8 @@ public class ConsoleLogWriter : ILogWriter
     {
         LogLevel.Trace => "TRACE",
         LogLevel.Debug => "DEBUG",
-        LogLevel.Info => "INFO ",
-        LogLevel.Warning => "WARN ",
+        LogLevel.Info => "INFO",
+        LogLevel.Warning => "WARN",
         LogLevel.Error => "ERROR",
         LogLevel.Fatal => "FATAL",
         _ => "UNKNW"

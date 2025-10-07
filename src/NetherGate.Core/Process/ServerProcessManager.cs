@@ -131,7 +131,7 @@ _logger.Info("正在启动 Minecraft 服务器...");
     /// <summary>
     /// 停止服务器
     /// </summary>
-    public async Task<bool> StopAsync(int timeoutMs = 30000)
+    public async Task<bool> StopAsync(int timeoutMs = 60000)
     {
         if (!IsRunning)
         {
@@ -155,30 +155,131 @@ _logger.Info("正在启动 Minecraft 服务器...");
 
         try
         {
-            _logger.Info("正在停止服务器...");
+            _logger.Info("========================================");
+            _logger.Info("正在停止 Minecraft 服务器...");
+            _logger.Info("========================================");
 
-            // 发送 stop 命令
-            await SendCommandAsync("stop");
+            // 检查进程是否已经退出
+            if (_process.HasExited)
+            {
+                _logger.Info("服务器进程已退出");
+                _isRunning = false;
+                return true;
+            }
 
-            // 等待进程正常退出
+            // 尝试发送 stop 命令（优雅关闭）
+            bool stopCommandSent = false;
+            try
+            {
+                _logger.Info("发送 stop 命令到服务器...");
+                await SendCommandAsync("stop");
+                stopCommandSent = true;
+                _logger.Info("stop 命令已发送，等待服务器保存数据并退出...");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"无法发送 stop 命令: {ex.Message}");
+                _logger.Warning("将尝试等待进程自然退出或强制终止");
+            }
+
+            // 等待进程正常退出（给予足够的时间）
+            _logger.Info($"等待服务器退出（最多 {timeoutMs/1000} 秒）...");
             var exited = _process.WaitForExit(timeoutMs);
 
-            if (!exited)
+            if (exited)
             {
-                _logger.Warning($"服务器未在 {timeoutMs}ms 内退出，强制终止");
-                _process.Kill();
-                _process.WaitForExit();
+                _logger.Info("✓ 服务器已正常退出");
+                _isRunning = false;
+                return true;
+            }
+
+            // 超时处理
+            _logger.Warning($"⚠ 服务器未在 {timeoutMs/1000} 秒内退出");
+            
+            if (stopCommandSent)
+            {
+                // 如果已经发送了 stop 命令，再给一些额外时间
+                _logger.Warning("正在保存世界数据，再等待 30 秒...");
+                exited = _process.WaitForExit(30000);
+                
+                if (exited)
+                {
+                    _logger.Info("✓ 服务器已退出");
+                    _isRunning = false;
+                    return true;
+                }
+            }
+
+            // 仍未退出，强制终止
+            _logger.Warning("⚠ 服务器仍未退出，将强制终止进程");
+            _logger.Warning("⚠ 注意：强制终止可能导致数据损坏或文件锁定");
+            
+            try
+            {
+                _process.Kill(entireProcessTree: true); // 终止整个进程树
+                _process.WaitForExit(5000);
+                _logger.Warning("✓ 服务器进程已强制终止");
+            }
+            catch (Exception killEx)
+            {
+                _logger.Error($"强制终止失败: {killEx.Message}");
             }
 
             _isRunning = false;
-            _logger.Info("服务器已停止");
-
+            
+            // 清理可能遗留的锁文件
+            await CleanupServerLocksAsync();
+            
             return true;
         }
         catch (Exception ex)
         {
-            _logger.Error($"停止服务器失败: {ex.Message}", ex);
+            _logger.Error($"停止服务器时发生错误: {ex.Message}", ex);
+            _isRunning = false;
+            
+            // 尝试清理锁文件
+            await CleanupServerLocksAsync();
+            
             return false;
+        }
+    }
+
+    /// <summary>
+    /// 清理服务器锁文件
+    /// </summary>
+    private async Task CleanupServerLocksAsync()
+    {
+        try
+        {
+            var workingDir = _config.Server.WorkingDirectory;
+            
+            // 清理主世界的 session.lock
+            var sessionLockPath = Path.Combine(workingDir, "world", "session.lock");
+            if (File.Exists(sessionLockPath))
+            {
+                _logger.Info($"清理锁文件: {sessionLockPath}");
+                await Task.Run(() => File.Delete(sessionLockPath));
+            }
+
+            // 清理下界的 session.lock
+            var netherLockPath = Path.Combine(workingDir, "world_nether", "session.lock");
+            if (File.Exists(netherLockPath))
+            {
+                _logger.Info($"清理锁文件: {netherLockPath}");
+                await Task.Run(() => File.Delete(netherLockPath));
+            }
+
+            // 清理末地的 session.lock
+            var endLockPath = Path.Combine(workingDir, "world_the_end", "session.lock");
+            if (File.Exists(endLockPath))
+            {
+                _logger.Info($"清理锁文件: {endLockPath}");
+                await Task.Run(() => File.Delete(endLockPath));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"清理锁文件时出错: {ex.Message}");
         }
     }
 
@@ -300,8 +401,13 @@ _logger.Info("正在启动 Minecraft 服务器...");
         args.AddRange(_config.Arguments.JvmMiddle);
 
         // JAR 文件
+        args.Add("-Dfile.encoding=UTF-8");
+        args.Add("-Dsun.stdout.encoding=UTF-8");
+        args.Add("-Dsun.stderr.encoding=UTF-8");
         args.Add("-jar");
-        args.Add(_config.Server.Jar);
+        // 引号包裹 JAR 路径，避免包含空格时解析错误
+        var jarArg = _config.Server.Jar.Contains(' ') ? $"\"{_config.Server.Jar}\"" : _config.Server.Jar;
+        args.Add(jarArg);
 
         // 服务器参数
         args.AddRange(_config.Arguments.Server);
@@ -317,12 +423,15 @@ _logger.Info("正在启动 Minecraft 服务器...");
         var scriptPath = _config.Script.Path;
         var extension = Path.GetExtension(scriptPath).ToLowerInvariant();
 
+        // 解析脚本路径（处理相对路径）
+        var resolvedScriptPath = ResolveScriptPath(scriptPath);
+
         startInfo.WorkingDirectory = _config.Script.WorkingDirectory;
 
         if (_config.Script.UseShell)
         {
             startInfo.UseShellExecute = true;
-            startInfo.FileName = scriptPath;
+            startInfo.FileName = resolvedScriptPath;
         }
         else
         {
@@ -332,16 +441,16 @@ _logger.Info("正在启动 Minecraft 服务器...");
                 case ".bat":
                 case ".cmd":
                     startInfo.FileName = "cmd.exe";
-                    startInfo.Arguments = $"/c \"{scriptPath}\" {string.Join(" ", _config.Script.Arguments)}";
+                    startInfo.Arguments = $"/c \"{resolvedScriptPath}\" {string.Join(" ", _config.Script.Arguments)}";
                     break;
 
                 case ".sh":
                     startInfo.FileName = "bash";
-                    startInfo.Arguments = $"\"{scriptPath}\" {string.Join(" ", _config.Script.Arguments)}";
+                    startInfo.Arguments = $"\"{resolvedScriptPath}\" {string.Join(" ", _config.Script.Arguments)}";
                     break;
 
                 case ".exe":
-                    startInfo.FileName = scriptPath;
+                    startInfo.FileName = resolvedScriptPath;
                     startInfo.Arguments = string.Join(" ", _config.Script.Arguments);
                     break;
 
@@ -349,6 +458,31 @@ _logger.Info("正在启动 Minecraft 服务器...");
                     throw new InvalidOperationException($"不支持的脚本类型: {extension}");
             }
         }
+    }
+
+    /// <summary>
+    /// 解析脚本路径（将相对路径转换为绝对路径）
+    /// </summary>
+    private string ResolveScriptPath(string scriptPath)
+    {
+        // 如果已经是绝对路径，直接返回
+        if (Path.IsPathRooted(scriptPath))
+            return scriptPath;
+
+        // 相对路径：基于当前工作目录解析
+        var basePath = Directory.GetCurrentDirectory();
+        var fullPath = Path.GetFullPath(Path.Combine(basePath, scriptPath));
+
+        _logger.Debug($"脚本路径解析: {scriptPath} -> {fullPath}");
+
+        // 检查文件是否存在
+        if (!File.Exists(fullPath))
+        {
+            _logger.Warning($"脚本文件不存在: {fullPath}");
+            _logger.Warning($"请确保脚本文件路径正确");
+        }
+
+        return fullPath;
     }
 
     /// <summary>
@@ -392,6 +526,9 @@ _logger.Info("正在启动 Minecraft 服务器...");
         {
             ErrorReceived?.Invoke(this, e.Data);
             _logger.Error($"[Server Error] {e.Data}");
+
+            // 将错误输出也交给日志解析器，部分实现会在 stderr 打印关键事件
+            _ = _logParser.ParseLineAsync(e.Data);
         }
         catch (Exception ex)
         {

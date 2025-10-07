@@ -45,6 +45,12 @@ public interface IPluginContext
     ISmpApi SmpApi { get; }
 
     /// <summary>
+    /// 统一服务器命令执行器
+    /// 优先使用 RCON，其次使用标准输入
+    /// </summary>
+    IServerCommandExecutor CommandExecutor { get; }
+
+    /// <summary>
     /// 配置管理器
     /// 用于加载和保存插件配置
     /// </summary>

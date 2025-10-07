@@ -12,6 +12,7 @@ using NetherGate.Core.Data;
 using NetherGate.Core.FileSystem;
 using NetherGate.Core.GameDisplay;
 using NetherGate.Core.Monitoring;
+using NetherGate.Core.Protocol;
 
 namespace NetherGate.Core.Plugins;
 
@@ -46,6 +47,7 @@ public class PluginManager
     private INetworkEventListener? _networkEventListener;
     private IGameDisplayApi? _gameDisplayApi;
     private readonly string _serverDirectory;
+    private readonly IServerCommandExecutor? _commandExecutor;
 
     public PluginManager(
         ILoggerFactory loggerFactory,
@@ -56,7 +58,8 @@ public class PluginManager
         string pluginsDirectory,
         string configDirectory,
         string globalLibPath = "lib",
-        string serverDirectory = ".")
+        string serverDirectory = ".",
+        IServerCommandExecutor? commandExecutor = null)
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger("PluginManager");
@@ -66,6 +69,7 @@ public class PluginManager
         _rconClient = rconClient;
         _pluginLoader = new PluginLoader(_logger, pluginsDirectory, configDirectory, globalLibPath);
         _serverDirectory = serverDirectory;
+        _commandExecutor = commandExecutor;
     }
     
     /// <summary>
@@ -304,7 +308,8 @@ public class PluginManager
                 GetItemComponentWriter(),
                 GetItemComponentConverter(),
                 GetNetworkEventListener(),
-                GetGameDisplayApi()
+                GetGameDisplayApi(),
+                _commandExecutor ?? new ServerCommandExecutor(new NetherGate.API.Configuration.NetherGateConfig(), _loggerFactory.CreateLogger("CmdExec"), null, _rconClient, _eventBus)
             );
 
             // 通过反射设置 Context 属性（如果存在）

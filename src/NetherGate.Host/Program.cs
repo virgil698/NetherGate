@@ -10,6 +10,7 @@ using NetherGate.Core.Events;
 using NetherGate.Core.Logging;
 using NetherGate.Core.Plugins;
 using NetherGate.Core.Protocol;
+using NetherGate.API.Protocol;
 using NetherGate.Core.WebSocket;
 using NetherGate.Host.Cli;
 
@@ -25,7 +26,16 @@ class Program
     private static ICommandManager? _commandManager;
     private static PluginManager? _pluginManager;
     private static SmpClient? _smpClient;
+    private static SmpService? _smpService;
     private static WebSocketServer? _wsServer;
+    private static LogListener? _logListener;
+    private static RconClient? _rconClient;
+    private static RconService? _rconService;
+    private static IServerCommandExecutor? _serverCommandExecutor;
+    private static NetherGate.Core.Process.ServerProcessManager? _serverProcessManager;
+    private static TaskCompletionSource<bool>? _serverReadySignal;
+    private static NetherGate.Core.Monitoring.HealthService? _healthService;
+    private static NetherGate.Core.WebSocket.EventBridge? _wsEventBridge;
 
     static async Task<int> Main(string[] args)
     {
@@ -54,7 +64,7 @@ class Program
             Console.WriteLine();
 
             // 1. 加载配置
-            Console.WriteLine("[NetherGate] [1/8] 加载配置...");
+            Console.WriteLine("[NetherGate] [1/9] 加载配置...");
             
             // 检查配置文件是否存在
             var configPath = ConfigurationLoader.GetConfigPath();
@@ -91,7 +101,7 @@ class Program
             _wsConfig = WebSocketConfigLoader.Load();
 
             // 2. 初始化日志系统
-            Console.WriteLine("[NetherGate] [2/8] 初始化日志系统...");
+            Console.WriteLine("[NetherGate] [2/9] 初始化日志系统...");
             _loggerFactory = InitializeLogging(_config.Logging);
             _logger = _loggerFactory.CreateLogger("NetherGate");
 
@@ -99,24 +109,42 @@ class Program
             _logger.Info($"版本: 0.1.0-alpha");
             _logger.Info($".NET 版本: {Environment.Version}");
 
-            // 3. 初始化事件总线
-            _logger.Info("[3/8] 初始化事件总线...");
+            // 3. 初始化事件总线（必须在启动服务器之前！）
+            _logger.Info("[3/9] 初始化事件总线...");
             _eventBus = InitializeEventBus();
 
-            // 4. 初始化目录结构
-            _logger.Info("[4/8] 初始化目录结构...");
+            // 4. 启动 Minecraft 服务端（如果配置启用且为 java/script 模式）
+            int currentStep = 4;
+            if (_config.ServerProcess.Enabled)
+            {
+                var launchMethod = _config.ServerProcess.LaunchMethod.ToLower();
+                if (launchMethod == "java" || launchMethod == "script")
+                {
+                    _logger.Info($"[{currentStep}/9] 启动 Minecraft 服务端...");
+                    await StartServerProcessAsync(_config, isInitPhase: true);
+                    currentStep++;
+                }
+            }
+
+            // 5. 初始化目录结构
+            _logger.Info($"[{currentStep}/9] 初始化目录结构...");
             InitializeDirectories(_config);
+            currentStep++;
 
-            // 5. 初始化命令系统
-            _logger.Info("[5/8] 初始化命令系统...");
+            // 6. 初始化命令系统
+            _logger.Info($"[{currentStep}/9] 初始化命令系统...");
             _commandManager = InitializeCommandManager();
+            currentStep++;
 
-            // 6. 初始化 SMP 客户端
-            _logger.Info("[6/8] 初始化 SMP 客户端...");
+            // 7. 初始化 SMP 客户端
+            _logger.Info($"[{currentStep}/9] 初始化 SMP 客户端...");
             _smpClient = InitializeSmpClient(_config);
+            _smpService = new SmpService(_config.ServerConnection, _smpClient, _eventBus!, _loggerFactory!.CreateLogger("SMPService"));
+            await _smpService.StartAsync();
+            currentStep++;
 
-            // 7. 初始化插件管理器（WebSocket 服务器依赖它）
-            _logger.Info("[7/8] 初始化插件管理器...");
+            // 8. 初始化插件管理器（WebSocket 服务器依赖它）
+            _logger.Info($"[{currentStep}/9] 初始化插件管理器...");
             _pluginManager = new PluginManager(
                 _loggerFactory!,
                 _eventBus!,
@@ -124,12 +152,42 @@ class Program
                 _commandManager!,
                 null, // RconClient - 暂时传 null，未来如果需要可以初始化
                 _config!.Plugins.Directory,
-                "config"
+                "config",
+                "lib",
+                _config.ServerProcess.Server.WorkingDirectory,
+                _serverCommandExecutor
             );
+            currentStep++;
 
-            // 8. 初始化 WebSocket 服务器（需要 PluginManager）
-            _logger.Info("[8/8] 初始化 WebSocket 服务器...");
+            // 9. 初始化 WebSocket 服务器（需要 PluginManager）
+            _logger.Info($"[{currentStep}/9] 初始化 WebSocket 服务器...");
             _wsServer = InitializeWebSocketServer(_wsConfig, _pluginManager);
+
+            // 启动日志监听器（若启用）
+            if (_config.LogListener.Enabled)
+            {
+                var logListenerLogger = _loggerFactory!.CreateLogger("LogListener");
+                _logListener = new LogListener(logListenerLogger, _eventBus!, _config.LogListener);
+                await _logListener.StartAsync();
+            }
+
+            // 初始化 RCON（若启用）
+            if (_config.Rcon.Enabled)
+            {
+                var rconLogger = _loggerFactory!.CreateLogger("RCON");
+                _rconClient = new RconClient(
+                    _config.Rcon.Host,
+                    _config.Rcon.Port,
+                    _config.Rcon.Password,
+                    _config.Rcon.ConnectTimeout,
+                    rconLogger
+                );
+                _rconService = new RconService(_config.Rcon, _rconClient, _eventBus!, rconLogger);
+                await _rconService.StartAsync();
+            }
+
+            // 初始化统一命令执行器
+            _serverCommandExecutor = new ServerCommandExecutor(_config, _loggerFactory!.CreateLogger("CmdExec"), _serverProcessManager, _rconClient, _eventBus);
 
             // 显示配置摘要
             _logger.Info("配置摘要:");
@@ -142,12 +200,43 @@ class Program
             // 从这里开始计时（基础框架初始化完成，准备启动服务器和加载插件）
             startTime = DateTime.Now;
 
-            // 测试 SMP 连接（如果配置启用）
-            if (_config.ServerConnection.AutoConnect)
+            // 等待服务器启动完成（如果在初始化阶段已启动）
+            if (_serverProcessManager != null && _serverReadySignal != null)
             {
                 _logger.Info("");
-                _logger.Info("连接到 SMP 服务器...");
-                await ConnectSmpAsync();
+                _logger.Info("========================================");
+                _logger.Info("等待 Minecraft 服务器完全启动...");
+                _logger.Info("等待检测关键词: 'Done (X.XXXs)!'");
+                _logger.Info("========================================");
+                
+                var timeout = TimeSpan.FromSeconds(_config.ServerProcess.Monitoring.StartupTimeout);
+                var waitTask = _serverReadySignal.Task;
+                
+                if (await Task.WhenAny(waitTask, Task.Delay(timeout)) == waitTask)
+                {
+                    _logger.Info("");
+                    _logger.Info("========================================");
+                    _logger.Info("✓ Minecraft 服务器启动完成！");
+                    _logger.Info("✓ 继续初始化 NetherGate 组件...");
+                    _logger.Info("========================================");
+                }
+                else
+                {
+                    _logger.Info("");
+                    _logger.Warning("========================================");
+                    _logger.Warning($"⚠ 服务器未在 {timeout.TotalSeconds} 秒内启动完成");
+                    _logger.Warning("⚠ 将继续执行，但某些功能可能不可用");
+                    _logger.Warning("========================================");
+                }
+            }
+            
+            // External 模式：在此处启动（不需要等待）
+            if (_config.ServerProcess.Enabled && 
+                _config.ServerProcess.LaunchMethod.Equals("external", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Info("");
+                _logger.Info("服务器进程管理（External 模式）...");
+                await StartServerProcessAsync(_config, isInitPhase: false);
             }
 
             // 启动 WebSocket 服务器（如果配置启用）
@@ -156,6 +245,30 @@ class Program
                 _logger.Info("");
                 _logger.Info("启动 WebSocket 服务器...");
                 await StartWebSocketServerAsync();
+                // 启动 WS 事件桥接
+                _wsEventBridge = new NetherGate.Core.WebSocket.EventBridge(_eventBus!, _wsServer!, _loggerFactory!.CreateLogger("WSEvent"));
+                await _wsEventBridge.StartAsync();
+            }
+
+            // 启动健康检查服务（发布 SystemHealthEvent）
+            _healthService = new NetherGate.Core.Monitoring.HealthService(
+                _eventBus!,
+                _loggerFactory!.CreateLogger("Health"),
+                _serverProcessManager,
+                _rconClient,
+                _smpClient,
+                _wsServer,
+                () => _pluginManager?.GetAllPluginContainers().Count ?? 0,
+                TimeSpan.FromSeconds(5)
+            );
+            await _healthService.StartAsync();
+
+            // 连接 SMP 服务器（如果配置启用）
+            if (_config.ServerConnection.AutoConnect)
+            {
+                _logger.Info("");
+                _logger.Info("连接到 SMP 服务器...");
+                await ConnectSmpAsync();
             }
 
             // 加载插件
@@ -265,9 +378,10 @@ class Program
     {
         var eventBus = new EventBus(_loggerFactory!.CreateLogger("EventBus"));
 
-        // 订阅一些测试事件
+        // 订阅事件
         eventBus.Subscribe<SmpConnectedEvent>(OnSmpConnected);
         eventBus.Subscribe<SmpDisconnectedEvent>(OnSmpDisconnected);
+        eventBus.Subscribe<ServerReadyEvent>(OnServerReady);
 
         _logger?.Debug("事件总线初始化完成");
         return eventBus;
@@ -327,6 +441,7 @@ class Program
                 playerDataReader,
                 worldDataReader,
                 () => pluginManager.GetAllPluginContainers(),
+                _serverCommandExecutor,
                 null! // 临时传 null，创建后会设置
             )
         );
@@ -411,9 +526,24 @@ class Program
         
         if (config.ServerProcess.Enabled)
         {
-            _logger?.Info($"    - Java: {config.ServerProcess.Java.Path}");
-            _logger?.Info($"    - JAR: {config.ServerProcess.Server.Jar}");
-            _logger?.Info($"    - 内存: {config.ServerProcess.Memory.Min}MB - {config.ServerProcess.Memory.Max}MB");
+            _logger?.Info($"    - 启动方式: {config.ServerProcess.LaunchMethod}");
+            _logger?.Info($"    - 工作目录: {config.ServerProcess.Server.WorkingDirectory}");
+            
+            if (config.ServerProcess.LaunchMethod.Equals("java", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger?.Info($"    - Java: {config.ServerProcess.Java.Path}");
+                _logger?.Info($"    - JAR: {config.ServerProcess.Server.Jar}");
+                _logger?.Info($"    - 内存: {config.ServerProcess.Memory.Min}MB - {config.ServerProcess.Memory.Max}MB");
+            }
+            else if (config.ServerProcess.LaunchMethod.Equals("script", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger?.Info($"    - 脚本路径: {config.ServerProcess.Script.Path}");
+                _logger?.Info($"    - 脚本参数: {string.Join(" ", config.ServerProcess.Script.Arguments)}");
+            }
+            else if (config.ServerProcess.LaunchMethod.Equals("external", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger?.Info($"    - 外部管理模式（服务器由其他方式启动）");
+            }
         }
 
         _logger?.Info($"  SMP 连接: {config.ServerConnection.Host}:{config.ServerConnection.Port}");
@@ -457,6 +587,63 @@ class Program
         commandManager.RegisterCommand(new StopCommand());
         
         _logger?.Debug("内置命令注册完成");
+    }
+
+    /// <summary>
+    /// 启动服务器进程
+    /// </summary>
+    /// <param name="config">配置</param>
+    /// <param name="isInitPhase">是否在初始化阶段（true=初始化阶段，false=后续启动）</param>
+    static async Task StartServerProcessAsync(NetherGateConfig config, bool isInitPhase = false)
+    {
+        try
+        {
+            // 初始化 spark agent（如果启用）
+            NetherGate.Core.Performance.SparkAgentManager? sparkAgent = null;
+            if (config.Spark.Enabled)
+            {
+                sparkAgent = new NetherGate.Core.Performance.SparkAgentManager(
+                    config.Spark,
+                    config.ServerProcess.Server.WorkingDirectory,
+                    _loggerFactory!.CreateLogger("SparkAgent")
+                );
+            }
+
+            // 创建服务器进程管理器
+            _serverProcessManager = new NetherGate.Core.Process.ServerProcessManager(
+                config.ServerProcess,
+                _loggerFactory!.CreateLogger("ServerProcess"),
+                _eventBus!,
+                sparkAgent
+            );
+
+            // 启动服务器
+            var started = await _serverProcessManager.StartAsync();
+            
+            if (started)
+            {
+                var launchMethod = config.ServerProcess.LaunchMethod.ToLower();
+                
+                // java 和 script 模式需要设置等待信号
+                if (isInitPhase && (launchMethod == "java" || launchMethod == "script"))
+                {
+                    _serverReadySignal = new TaskCompletionSource<bool>();
+                    _logger?.Info("服务器进程已启动，将在后续步骤等待启动完成");
+                }
+                else
+                {
+                    _logger?.Info("服务器进程管理已初始化");
+                }
+            }
+            else
+            {
+                _logger?.Error("启动 Minecraft 服务器进程失败");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error($"启动服务器进程时发生错误: {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -551,6 +738,15 @@ class Program
                 if (string.IsNullOrWhiteSpace(input))
                     continue;
 
+                // 以 / 开头的命令视为 Minecraft 服务端命令（去掉前导 / 后发送）
+                var trimmed = input.Trim();
+                if (trimmed.StartsWith("/"))
+                {
+                    var serverCommand = trimmed.Substring(1).TrimStart();
+                    await TryExecuteMinecraftCommandAsync(serverCommand);
+                    continue;
+                }
+
                 // 处理 stop 命令
                 if (input.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase))
                 {
@@ -577,6 +773,34 @@ class Program
             {
                 _logger?.Error("命令执行时发生异常", ex);
             }
+        }
+    }
+
+    /// <summary>
+    /// 发送 Minecraft 服务端命令
+    /// </summary>
+    static async Task TryExecuteMinecraftCommandAsync(string serverCommand)
+    {
+        if (string.IsNullOrWhiteSpace(serverCommand))
+            return;
+
+        try
+        {
+            if (_serverCommandExecutor == null)
+            {
+                _logger?.Warning("命令执行器未初始化");
+                return;
+            }
+
+            var ok = await _serverCommandExecutor.TryExecuteAsync(serverCommand);
+            if (ok)
+                _logger?.Info($"已发送到 MC 服务器: {serverCommand}");
+            else
+                _logger?.Warning("没有可用的命令通道或发送失败");
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error($"发送 Minecraft 命令失败: {ex.Message}", ex);
         }
     }
 
@@ -610,8 +834,21 @@ class Program
         // 1. 停止 WebSocket 服务器
         if (_wsServer != null)
         {
+            if (_wsEventBridge != null)
+            {
+                await _wsEventBridge.StopAsync();
+                _wsEventBridge.Dispose();
+            }
             _logger?.Info("停止 WebSocket 服务器...");
             await _wsServer.StopAsync();
+        }
+
+        // 1.5 停止日志监听器
+        if (_logListener != null)
+        {
+            _logger?.Info("停止日志监听器...");
+            await _logListener.StopAsync();
+            _logListener.Dispose();
         }
 
         // 2. 卸载插件
@@ -621,6 +858,14 @@ class Program
             await _pluginManager.UnloadAllPluginsAsync();
         }
 
+        // 2.5 停止 RCON 服务
+        if (_rconService != null)
+        {
+            _logger?.Info("停止 RCON 服务...");
+            await _rconService.StopAsync();
+            _rconService.Dispose();
+        }
+
         // 3. 断开 SMP 连接
         if (_smpClient != null)
         {
@@ -628,11 +873,31 @@ class Program
             await _smpClient.DisconnectAsync();
             _smpClient.Dispose();
         }
+        if (_smpService != null)
+        {
+            await _smpService.StopAsync();
+            _smpService.Dispose();
+        }
 
-        // 4. 清理事件总线
+        // 4. 停止服务器进程
+        if (_serverProcessManager != null)
+        {
+            _logger?.Info("停止 Minecraft 服务器...");
+            await _serverProcessManager.StopAsync();
+            _serverProcessManager.Dispose();
+        }
+
+        // 5. 清理事件总线
         if (_eventBus != null)
         {
             _eventBus.ClearAllSubscriptions();
+        }
+
+        // 6. 停止健康检查
+        if (_healthService != null)
+        {
+            await _healthService.StopAsync();
+            _healthService.Dispose();
         }
     }
 
@@ -653,6 +918,17 @@ class Program
     {
         var reason = string.IsNullOrEmpty(@event.Reason) ? "未知原因" : @event.Reason;
         _logger?.Warning($"[事件] SMP 连接已断开 ({@event.Timestamp:HH:mm:ss}) - {reason}");
+    }
+
+    /// <summary>
+    /// 服务器启动完成事件
+    /// </summary>
+    static void OnServerReady(ServerReadyEvent @event)
+    {
+        _logger?.Info($"[事件] 服务器启动完成 (耗时: {@event.StartupTimeSeconds:F3} 秒)");
+        
+        // 通知等待的任务
+        _serverReadySignal?.TrySetResult(true);
     }
 
     /// <summary>

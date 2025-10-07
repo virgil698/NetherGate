@@ -35,12 +35,14 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly INetworkEventListener _networkEventListener;
     private readonly PluginMessenger _messenger;
     private readonly IGameDisplayApi _gameDisplay;
+    private readonly IServerCommandExecutor _commandExecutor;
 
     public PluginInfo PluginInfo { get; }
     public string DataDirectory { get; }
     public ILogger Logger => _logger;
     public IEventBus EventBus => _eventBus;
     public ISmpApi SmpApi => _smpApi;
+    public IServerCommandExecutor CommandExecutor => _commandExecutor;
     public ICommandManager CommandManager => _commandManager;
     public IConfigManager ConfigManager => _configManager;
 
@@ -87,7 +89,8 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         IItemComponentWriter itemComponentWriter,
         IItemComponentConverter itemComponentConverter,
         INetworkEventListener networkEventListener,
-        IGameDisplayApi gameDisplay)
+        IGameDisplayApi gameDisplay,
+        IServerCommandExecutor commandExecutor)
     {
         _pluginManager = pluginManager;
         _eventBus = eventBus;
@@ -106,6 +109,7 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         _itemComponentConverter = itemComponentConverter;
         _networkEventListener = networkEventListener;
         _gameDisplay = gameDisplay;
+        _commandExecutor = commandExecutor;
 
         PluginInfo = container.Metadata.ToPluginInfo();
         DataDirectory = container.DataDirectory;

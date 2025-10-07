@@ -308,6 +308,27 @@ public class WebSocketServer : IWebSocketServer, IDisposable
         await Task.WhenAll(tasks);
     }
 
+    /// <summary>
+    /// 按订阅类型广播事件
+    /// </summary>
+    public async Task BroadcastEventAsync(string eventType, object data)
+    {
+        try
+        {
+            var payload = System.Text.Json.JsonSerializer.Serialize(new { type = eventType, data });
+            var targets = _clients.Values.Where(c => c.Subscriptions.Contains(eventType)).ToList();
+            if (targets.Count == 0)
+                return;
+
+            var tasks = targets.Select(c => SendToClientAsync(c.Id, payload));
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("广播事件失败", ex);
+        }
+    }
+
     public async Task SendToClientAsync(string clientId, string message)
     {
         if (!_clients.TryGetValue(clientId, out var client))
@@ -393,4 +414,5 @@ public class WebSocketClient
     public string IpAddress { get; set; } = string.Empty;
     public bool IsAuthenticated { get; set; }
     public string? Username { get; set; }
+    public HashSet<string> Subscriptions { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }

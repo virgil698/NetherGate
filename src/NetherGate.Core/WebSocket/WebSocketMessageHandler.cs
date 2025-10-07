@@ -24,6 +24,7 @@ public class WebSocketMessageHandler
     private readonly IWorldDataReader _worldDataReader;
     private readonly Func<IReadOnlyList<PluginContainer>> _getPlugins;
     private readonly WebSocketServer _server;
+    private readonly IServerCommandExecutor? _commandExecutor;
 
     public WebSocketMessageHandler(
         WebSocketConfig config,
@@ -34,6 +35,7 @@ public class WebSocketMessageHandler
         IPlayerDataReader playerDataReader,
         IWorldDataReader worldDataReader,
         Func<IReadOnlyList<PluginContainer>> getPlugins,
+        IServerCommandExecutor? commandExecutor,
         WebSocketServer server)
     {
         _config = config;
@@ -44,6 +46,7 @@ public class WebSocketMessageHandler
         _playerDataReader = playerDataReader;
         _worldDataReader = worldDataReader;
         _getPlugins = getPlugins;
+        _commandExecutor = commandExecutor;
         _server = server;
     }
 
@@ -116,6 +119,11 @@ public class WebSocketMessageHandler
                     await HandleLogsSubscribeAsync(client, message);
                     break;
 
+                // 执行 MC 服务器命令（通过统一执行器）
+                case "server.command":
+                    await HandleServerCommandAsync(client, message);
+                    break;
+
                 default:
                     await SendResponseAsync(client, WebSocketResponse.Fail($"未知的消息类型: {message.Type}", message.RequestId));
                     break;
@@ -166,14 +174,45 @@ public class WebSocketMessageHandler
 
     private async Task HandleSubscribeAsync(WebSocketClient client, WebSocketMessage message)
     {
-        // TODO: 实现事件订阅
-        await SendResponseAsync(client, WebSocketResponse.Ok(new { subscribed = true }, message.RequestId));
+        var data = JsonSerializer.SerializeToElement(message.Data);
+        if (!data.TryGetProperty("types", out var typesElem) || typesElem.ValueKind != JsonValueKind.Array)
+        {
+            await SendResponseAsync(client, WebSocketResponse.Fail("缺少类型数组 'types'", message.RequestId));
+            return;
+        }
+
+        var count = 0;
+        foreach (var t in typesElem.EnumerateArray())
+        {
+            var s = t.GetString();
+            if (!string.IsNullOrWhiteSpace(s))
+            {
+                client.Subscriptions.Add(s!);
+                count++;
+            }
+        }
+        await SendResponseAsync(client, WebSocketResponse.Ok(new { subscribed = count }, message.RequestId));
     }
 
     private async Task HandleUnsubscribeAsync(WebSocketClient client, WebSocketMessage message)
     {
-        // TODO: 实现取消订阅
-        await SendResponseAsync(client, WebSocketResponse.Ok(new { unsubscribed = true }, message.RequestId));
+        var data = JsonSerializer.SerializeToElement(message.Data);
+        if (!data.TryGetProperty("types", out var typesElem) || typesElem.ValueKind != JsonValueKind.Array)
+        {
+            await SendResponseAsync(client, WebSocketResponse.Fail("缺少类型数组 'types'", message.RequestId));
+            return;
+        }
+
+        var count = 0;
+        foreach (var t in typesElem.EnumerateArray())
+        {
+            var s = t.GetString();
+            if (!string.IsNullOrWhiteSpace(s) && client.Subscriptions.Remove(s!))
+            {
+                count++;
+            }
+        }
+        await SendResponseAsync(client, WebSocketResponse.Ok(new { unsubscribed = count }, message.RequestId));
     }
 
     private async Task HandleServerInfoAsync(WebSocketClient client, WebSocketMessage message)
@@ -209,6 +248,48 @@ public class WebSocketMessageHandler
         };
 
         await SendResponseAsync(client, WebSocketResponse.Ok(status, message.RequestId));
+    }
+
+    private async Task HandleServerCommandAsync(WebSocketClient client, WebSocketMessage message)
+    {
+        if (_commandExecutor == null)
+        {
+            await SendResponseAsync(client, WebSocketResponse.Fail("命令执行器未就绪", message.RequestId));
+            return;
+        }
+
+        var data = JsonSerializer.SerializeToElement(message.Data);
+        if (!data.TryGetProperty("command", out var cmdElem))
+        {
+            await SendResponseAsync(client, WebSocketResponse.Fail("缺少 command 字段", message.RequestId));
+            return;
+        }
+
+        var command = cmdElem.GetString() ?? string.Empty;
+        var awaitResponse = data.TryGetProperty("awaitResponse", out var ar) && ar.GetBoolean();
+
+        try
+        {
+            if (awaitResponse)
+            {
+                var (ok, resp) = await _commandExecutor.TryExecuteWithResponseAsync(command);
+                await SendResponseAsync(client, ok
+                    ? WebSocketResponse.Ok(new { response = resp }, message.RequestId)
+                    : WebSocketResponse.Fail("执行失败", message.RequestId));
+            }
+            else
+            {
+                var ok = await _commandExecutor.TryExecuteAsync(command);
+                await SendResponseAsync(client, ok
+                    ? WebSocketResponse.Ok(new { sent = true }, message.RequestId)
+                    : WebSocketResponse.Fail("发送失败", message.RequestId));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"WS 执行命令失败: {ex.Message}", ex);
+            await SendResponseAsync(client, WebSocketResponse.Fail($"异常: {ex.Message}", message.RequestId));
+        }
     }
 
     private async Task HandlePlayersListAsync(WebSocketClient client, WebSocketMessage message)
