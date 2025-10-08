@@ -15,6 +15,7 @@ public class PluginLoader
     private readonly string _pluginsDirectory;
     private readonly string _configDirectory;
     private readonly string _globalLibPath;
+    private IServiceProvider? _serviceProvider;
 
     public PluginLoader(ILogger logger, string pluginsDirectory, string configDirectory, string globalLibPath)
     {
@@ -29,6 +30,14 @@ public class PluginLoader
             Directory.CreateDirectory(_globalLibPath);
             _logger.Debug($"创建全局库目录: {_globalLibPath}");
         }
+    }
+    
+    /// <summary>
+    /// 设置服务提供者（用于构造函数注入）
+    /// </summary>
+    public void SetServiceProvider(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
     }
 
     /// <summary>
@@ -191,8 +200,8 @@ public class PluginLoader
                 return false;
             }
 
-            // 5. 创建插件实例
-            container.Instance = (IPlugin?)Activator.CreateInstance(mainClass);
+            // 5. 创建插件实例（支持构造函数注入）
+            container.Instance = (IPlugin?)CreatePluginInstance(mainClass);
             if (container.Instance == null)
             {
                 container.SetError("无法创建插件实例");
@@ -318,6 +327,66 @@ public class PluginLoader
 
         // 3. 加载新插件
         return LoadPlugin(container);
+    }
+    
+    /// <summary>
+    /// 创建插件实例（支持构造函数注入）
+    /// </summary>
+    private object? CreatePluginInstance(Type pluginType)
+    {
+        try
+        {
+            // 如果有服务提供者，尝试使用构造函数注入
+            if (_serviceProvider != null)
+            {
+                // 获取所有构造函数，按参数数量排序（从多到少）
+                var constructors = pluginType.GetConstructors()
+                    .OrderByDescending(c => c.GetParameters().Length)
+                    .ToArray();
+                
+                foreach (var constructor in constructors)
+                {
+                    try
+                    {
+                        var parameters = constructor.GetParameters();
+                        var args = new object[parameters.Length];
+                        
+                        // 尝试从服务提供者解析所有参数
+                        bool allResolved = true;
+                        for (int i = 0; i < parameters.Length; i++)
+                        {
+                            var service = _serviceProvider.GetService(parameters[i].ParameterType);
+                            if (service == null && !parameters[i].HasDefaultValue)
+                            {
+                                allResolved = false;
+                                break;
+                            }
+                            args[i] = service ?? parameters[i].DefaultValue!;
+                        }
+                        
+                        if (allResolved)
+                        {
+                            _logger.Debug($"  使用构造函数注入创建插件实例: {constructor.GetParameters().Length} 个参数");
+                            return constructor.Invoke(args);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug($"  构造函数注入失败，尝试下一个构造函数: {ex.Message}");
+                        continue;
+                    }
+                }
+            }
+            
+            // 回退到无参构造函数
+            _logger.Debug($"  使用无参构造函数创建插件实例");
+            return Activator.CreateInstance(pluginType);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"创建插件实例失败: {ex.Message}", ex);
+            return null;
+        }
     }
 }
 

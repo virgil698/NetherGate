@@ -61,6 +61,9 @@ public class PluginManager
     private IGameUtilities? _gameUtilities;
     private IMusicPlayer? _musicPlayer;
     private IPermissionManager? _permissionManager;
+    
+    // DI 服务提供者（用于插件构造函数注入）
+    private IServiceProvider? _serviceProvider;
 
     public PluginManager(
         ILoggerFactory loggerFactory,
@@ -83,6 +86,15 @@ public class PluginManager
         _pluginLoader = new PluginLoader(_logger, pluginsDirectory, configDirectory, globalLibPath);
         _serverDirectory = serverDirectory;
         _commandExecutor = commandExecutor;
+    }
+    
+    /// <summary>
+    /// 设置服务提供者（用于插件构造函数注入）
+    /// </summary>
+    public void SetServiceProvider(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+        _pluginLoader.SetServiceProvider(serviceProvider);
     }
     
     /// <summary>
