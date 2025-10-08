@@ -85,6 +85,16 @@ public interface IPermissionManager
     List<string> GetGroupPermissions(string groupName);
 
     /// <summary>
+    /// 获取所有已记录的用户（含配置中出现过的用户）
+    /// </summary>
+    List<string> GetAllUsers();
+
+    /// <summary>
+    /// 获取所有权限组名称
+    /// </summary>
+    List<string> GetAllGroups();
+
+    /// <summary>
     /// 保存权限配置
     /// </summary>
     Task SaveAsync();

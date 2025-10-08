@@ -473,12 +473,39 @@ public interface IGameDisplayApi
 /// </summary>
 public enum BossBarColor
 {
+    /// <summary>
+    /// 蓝色
+    /// </summary>
     Blue,
+    
+    /// <summary>
+    /// 绿色
+    /// </summary>
     Green,
+    
+    /// <summary>
+    /// 粉色
+    /// </summary>
     Pink,
+    
+    /// <summary>
+    /// 紫色
+    /// </summary>
     Purple,
+    
+    /// <summary>
+    /// 红色
+    /// </summary>
     Red,
+    
+    /// <summary>
+    /// 白色
+    /// </summary>
     White,
+    
+    /// <summary>
+    /// 黄色
+    /// </summary>
     Yellow
 }
 

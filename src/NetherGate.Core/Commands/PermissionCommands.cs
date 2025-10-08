@@ -6,9 +6,10 @@ namespace NetherGate.Core.Commands;
 /// <summary>
 /// Permission 命令 - 权限管理
 /// </summary>
-public class PermissionCommand : ICommand
+public class PermissionCommand : ICommand, IHasCommandTree, IParsedCommand
 {
     private readonly IPermissionManager _permissionManager;
+    private readonly CommandTree _tree;
 
     public string Name => "permission";
     public string Description => "权限管理命令";
@@ -20,7 +21,59 @@ public class PermissionCommand : ICommand
     public PermissionCommand(IPermissionManager permissionManager)
     {
         _permissionManager = permissionManager;
+        _tree = new CommandTree("permission", "权限管理", Permission);
+        var root = _tree.Root;
+
+        // permission user <add|remove|list|info>
+        var user = root.Sub("user", "用户权限管理", Permission);
+        user.Sub("add", "授予用户权限", Permission)
+            .ArgSpec("user", CommandArgType.String)
+            .ArgSpec("permission", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllUsers().AsEnumerable()))
+            .Arg(1, (s, a) => Task.FromResult(Enumerable.Empty<string>()));
+        user.Sub("remove", "撤销用户权限", Permission)
+            .ArgSpec("user", CommandArgType.String)
+            .ArgSpec("permission", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllUsers().AsEnumerable()))
+            .Arg(1, (s, a) => Task.FromResult(Enumerable.Empty<string>()));
+        user.Sub("list", "列出用户权限", Permission)
+            .ArgSpec("user", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllUsers().AsEnumerable()));
+        user.Sub("info", "显示用户权限与组", Permission)
+            .ArgSpec("user", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllUsers().AsEnumerable()));
+
+        // permission group <create|delete|add|remove|list|adduser|removeuser>
+        var group = root.Sub("group", "权限组管理", Permission);
+        group.Sub("create", "创建权限组", Permission)
+            .ArgSpec("group", CommandArgType.String);
+        group.Sub("delete", "删除权限组", Permission)
+            .ArgSpec("group", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllGroups().AsEnumerable()));
+        group.Sub("add", "为组添加权限", Permission)
+            .ArgSpec("group", CommandArgType.String)
+            .ArgSpec("permission", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllGroups().AsEnumerable()));
+        group.Sub("remove", "移除组权限", Permission)
+            .ArgSpec("group", CommandArgType.String)
+            .ArgSpec("permission", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllGroups().AsEnumerable()));
+        group.Sub("list", "列出组权限或所有组", Permission)
+            .ArgSpec("group", CommandArgType.String, required: false)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllGroups().AsEnumerable()));
+        group.Sub("adduser", "将用户加入组", Permission)
+            .ArgSpec("user", CommandArgType.String)
+            .ArgSpec("group", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllUsers().AsEnumerable()))
+            .Arg(1, (s, a) => Task.FromResult(_permissionManager.GetAllGroups().AsEnumerable()));
+        group.Sub("removeuser", "将用户从组移除", Permission)
+            .ArgSpec("user", CommandArgType.String)
+            .ArgSpec("group", CommandArgType.String)
+            .Arg(0, (s, a) => Task.FromResult(_permissionManager.GetAllUsers().AsEnumerable()))
+            .Arg(1, (s, a) => Task.FromResult(_permissionManager.GetAllGroups().AsEnumerable()));
     }
+
+    CommandTree IHasCommandTree.CommandTree => _tree;
 
     public async Task<List<string>> TabCompleteAsync(ICommandSender sender, string[] args)
     {
@@ -84,6 +137,27 @@ public class PermissionCommand : ICommand
         {
             return Task.FromResult(CommandResult.Fail($"执行失败: {ex.Message}"));
         }
+    }
+
+    public Task<CommandResult> ExecuteParsedAsync(ICommandSender sender, IReadOnlyList<object?> positionalArgs, IReadOnlyDictionary<string, object?> namedArgs)
+    {
+        var category = namedArgs.TryGetValue("__category", out var c) ? c as string : null;
+        var sub = namedArgs.TryGetValue("__subcommand", out var s) ? s as string : null;
+        if (string.IsNullOrEmpty(category) || string.IsNullOrEmpty(sub))
+        {
+            return Task.FromResult(CommandResult.Fail($"用法: {Usage}"));
+        }
+
+        if (category.Equals("user", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(HandleUserCommand(sub, positionalArgs.Select(a => a?.ToString() ?? string.Empty).ToArray()));
+        }
+        if (category.Equals("group", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(HandleGroupCommand(sub, positionalArgs.Select(a => a?.ToString() ?? string.Empty).ToArray()));
+        }
+
+        return Task.FromResult(CommandResult.Fail($"未知类型: {category}"));
     }
 
     private CommandResult HandleUserCommand(string action, string[] args)

@@ -3,10 +3,12 @@ using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
 using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
+using NetherGate.API.Localization;
 using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
+using NetherGate.API.Scheduling;
 
 namespace NetherGate.Core.Plugins;
 
@@ -36,6 +38,8 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly PluginMessenger _messenger;
     private readonly IGameDisplayApi _gameDisplay;
     private readonly IServerCommandExecutor _commandExecutor;
+    private readonly II18nService _i18n;
+    private readonly IScheduler _scheduler;
 
     public PluginInfo PluginInfo { get; }
     public string DataDirectory { get; }
@@ -61,6 +65,8 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     public INetworkEventListener NetworkEventListener => _networkEventListener;
     public IPluginMessenger Messenger => _messenger;
     public IGameDisplayApi GameDisplay => _gameDisplay;
+    public II18nService I18n => _i18n;
+    public IScheduler Scheduler => _scheduler;
     
     // 待实现的功能
     public IServerQuery ServerQuery => throw new NotImplementedException("服务器查询功能将在后续版本实现（基于 MC 网络协议）");
@@ -119,6 +125,16 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
 
         // 为插件创建专用的配置管理器
         _configManager = new ConfigManager(container.DataDirectory, _logger);
+
+        // 创建 i18n 服务（默认使用系统 locale 或环境变量指定）
+        _i18n = new NetherGate.Core.Localization.I18nService(
+            Path.Combine(container.DataDirectory, "lang"),
+            null,
+            _logger
+        );
+
+        // 创建调度器
+        _scheduler = new NetherGate.Core.Scheduling.Scheduler(_logger);
 
         // 为插件创建专用的消息传递器
         _messenger = new PluginMessenger(

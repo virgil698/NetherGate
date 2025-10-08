@@ -171,11 +171,135 @@ public class CommandManager : ICommandManager
             return CommandResult.Fail($"权限不足: 需要权限 '{command.Permission}'");
         }
 
+        List<object?>? parsedArgs = null;
+        Dictionary<string, object?>? namedArgs = null;
+
+        // 如果命令提供了命令树，进行基础参数校验与友好用法提示，并尝试预解析
+        if (command is IHasCommandTree hasTree)
+        {
+            var tree = hasTree.CommandTree;
+            var (matchedTokens, node) = tree.ResolvePath(args);
+            var matched = matchedTokens.Count;
+
+            // 针对匹配到的最终节点执行权限检查（支持子命令独立权限）
+            if (!string.IsNullOrEmpty(node.Permission) && !sender.HasPermission(node.Permission))
+            {
+                return CommandResult.Fail($"权限不足: 需要权限 '{node.Permission}'");
+            }
+
+            // 若匹配到子命令但缺少必需参数，返回用法提示
+            if (matched == args.Length)
+            {
+                var requiredCount = node.ArgSpecs.Count(s => s.Required);
+                var provided = args.Length - matched;
+                if (provided < requiredCount)
+                {
+                    var usageLines = tree.GenerateUsageLines(command.Name);
+                    if (usageLines.Count > 0)
+                    {
+                        var usageHelp = string.Join("\n  ", usageLines);
+                        return CommandResult.Fail($"参数不足。可用用法:\n  {usageHelp}");
+                    }
+                }
+            }
+
+            // 类型校验与枚举校验
+            var argTokens = args.Skip(matched).ToArray();
+            if (argTokens.Length > node.ArgSpecs.Count)
+            {
+                var usageLines = tree.GenerateUsageLines(command.Name);
+                var usageHelp = usageLines.Count > 0 ? string.Join("\n  ", usageLines) : command.Usage;
+                return CommandResult.Fail($"参数过多。可用用法:\n  {usageHelp}");
+            }
+
+            parsedArgs = new List<object?>(capacity: Math.Max(0, node.ArgSpecs.Count));
+            namedArgs = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+            // 记录匹配到的最后一级子命令名称，供 IParsedCommand 使用
+            if (matched > 0 && matched <= args.Length)
+            {
+                var subName = args[matched - 1];
+                if (!string.IsNullOrEmpty(subName))
+                {
+                    namedArgs["__subcommand"] = subName.ToLowerInvariant();
+                }
+                var category = matchedTokens[0];
+                if (!string.IsNullOrEmpty(category))
+                {
+                    namedArgs["__category"] = category.ToLowerInvariant();
+                }
+            }
+
+            for (int i = 0; i < argTokens.Length && i < node.ArgSpecs.Count; i++)
+            {
+                var tok = argTokens[i];
+                var spec = node.ArgSpecs[i];
+
+                switch (spec.Type)
+                {
+                    case CommandArgType.Integer:
+                        if (!int.TryParse(tok, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var intVal))
+                        {
+                            return CommandResult.Fail($"参数 {i + 1} 应为整数: '{tok}'");
+                        }
+                        parsedArgs.Add(intVal);
+                        namedArgs[spec.Name] = intVal;
+                        break;
+                    case CommandArgType.Float:
+                        if (!double.TryParse(tok, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var dblVal))
+                        {
+                            return CommandResult.Fail($"参数 {i + 1} 应为数字: '{tok}'");
+                        }
+                        parsedArgs.Add(dblVal);
+                        namedArgs[spec.Name] = dblVal;
+                        break;
+                    case CommandArgType.Boolean:
+                    {
+                        var t = tok.ToLowerInvariant();
+                        var ok = t is "true" or "false" or "on" or "off" or "yes" or "no" or "1" or "0";
+                        if (!ok)
+                        {
+                            return CommandResult.Fail($"参数 {i + 1} 应为布尔值(true/false/on/off/yes/no/1/0): '{tok}'");
+                        }
+                        var boolVal = t is "true" or "on" or "yes" or "1";
+                        parsedArgs.Add(boolVal);
+                        namedArgs[spec.Name] = boolVal;
+                        break;
+                    }
+                    case CommandArgType.Enum:
+                        if (spec.EnumValues is { Count: > 0 })
+                        {
+                            var match = spec.EnumValues.FirstOrDefault(v => v.Equals(tok, StringComparison.OrdinalIgnoreCase));
+                            var ok = match != null;
+                            if (!ok)
+                            {
+                                return CommandResult.Fail($"参数 {i + 1} 可选值: {string.Join(", ", spec.EnumValues)} (收到: '{tok}')");
+                            }
+                            parsedArgs.Add(match);
+                            namedArgs[spec.Name] = match;
+                        }
+                        break;
+                    case CommandArgType.String:
+                    default:
+                        parsedArgs.Add(tok);
+                        namedArgs[spec.Name] = tok;
+                        break;
+                }
+            }
+        }
+
         // 执行命令
         try
         {
             _logger.Debug($"执行命令: {commandName} {string.Join(" ", args)} (by {sender.Name})");
-            return await command.ExecuteAsync(sender, args);
+            if (parsedArgs != null && namedArgs != null && command is IParsedCommand parsed)
+            {
+                return await parsed.ExecuteParsedAsync(sender, parsedArgs, namedArgs);
+            }
+            else
+            {
+                return await command.ExecuteAsync(sender, args);
+            }
         }
         catch (Exception ex)
         {
@@ -342,16 +466,33 @@ public class CommandManager : ICommandManager
                 return results;
             }
 
-            // 调用命令的 TabComplete 方法
             var args = parts.Skip(1).ToArray();
-            try
+
+            // 如果命令提供了结构化命令树，优先使用命令树进行建议
+            if (targetCommand is IHasCommandTree treeProvider)
             {
-                var commandResults = await targetCommand.TabCompleteAsync(sender, args);
-                results.AddRange(commandResults);
+                try
+                {
+                    var treeResults = await treeProvider.CommandTree.SuggestAsync(sender, args);
+                    results.AddRange(treeResults);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"命令 '{commandName}' 的命令树补全失败: {ex.Message}");
+                }
             }
-            catch (Exception ex)
+            else
             {
-                _logger.Debug($"命令 '{commandName}' 的 Tab 补全失败: {ex.Message}");
+                // 回退到命令自身的补全方法
+                try
+                {
+                    var commandResults = await targetCommand.TabCompleteAsync(sender, args);
+                    results.AddRange(commandResults);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"命令 '{commandName}' 的 Tab 补全失败: {ex.Message}");
+                }
             }
         }
 

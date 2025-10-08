@@ -5,6 +5,9 @@ namespace NetherGate.API.Events;
 /// </summary>
 public abstract record NetworkEvent
 {
+    /// <summary>
+    /// 事件时间戳
+    /// </summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
 
@@ -46,8 +49,19 @@ public record PlayerConnectionAttemptEvent : NetworkEvent
 /// </summary>
 public record PlayerLoginStartEvent : NetworkEvent
 {
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 玩家 UUID
+    /// </summary>
     public Guid? PlayerUuid { get; init; }
+    
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
 }
 
@@ -56,8 +70,19 @@ public record PlayerLoginStartEvent : NetworkEvent
 /// </summary>
 public record PlayerLoginSuccessEvent : NetworkEvent
 {
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 玩家 UUID
+    /// </summary>
     public Guid PlayerUuid { get; init; }
+    
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
 }
 
@@ -66,8 +91,19 @@ public record PlayerLoginSuccessEvent : NetworkEvent
 /// </summary>
 public record PlayerLoginFailedEvent : NetworkEvent
 {
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 失败原因
+    /// </summary>
     public string Reason { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
 }
 
@@ -76,9 +112,24 @@ public record PlayerLoginFailedEvent : NetworkEvent
 /// </summary>
 public record PlayerDisconnectedEvent : NetworkEvent
 {
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 玩家 UUID
+    /// </summary>
     public Guid? PlayerUuid { get; init; }
+    
+    /// <summary>
+    /// 断开原因
+    /// </summary>
     public string Reason { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
 }
 
@@ -89,10 +140,29 @@ public record PlayerDisconnectedEvent : NetworkEvent
 /// </summary>
 public record PacketReceivedEvent : NetworkEvent
 {
+    /// <summary>
+    /// 数据包 ID
+    /// </summary>
     public int PacketId { get; init; }
+    
+    /// <summary>
+    /// 数据包类型
+    /// </summary>
     public string PacketType { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 数据长度
+    /// </summary>
     public int DataLength { get; init; }
+    
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 玩家 UUID
+    /// </summary>
     public Guid? PlayerUuid { get; init; }
 }
 
@@ -101,10 +171,29 @@ public record PacketReceivedEvent : NetworkEvent
 /// </summary>
 public record PacketSentEvent : NetworkEvent
 {
+    /// <summary>
+    /// 数据包 ID
+    /// </summary>
     public int PacketId { get; init; }
+    
+    /// <summary>
+    /// 数据包类型
+    /// </summary>
     public string PacketType { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 数据长度
+    /// </summary>
     public int DataLength { get; init; }
+    
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 玩家 UUID
+    /// </summary>
     public Guid? PlayerUuid { get; init; }
 }
 
@@ -115,7 +204,14 @@ public record PacketSentEvent : NetworkEvent
 /// </summary>
 public record ServerStatusQueryEvent : NetworkEvent
 {
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 协议版本
+    /// </summary>
     public int ProtocolVersion { get; init; }
 }
 
@@ -124,7 +220,14 @@ public record ServerStatusQueryEvent : NetworkEvent
 /// </summary>
 public record ServerPingEvent : NetworkEvent
 {
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// Ping 载荷
+    /// </summary>
     public long Payload { get; init; }
 }
 
@@ -135,10 +238,29 @@ public record ServerPingEvent : NetworkEvent
 /// </summary>
 public record NetworkExceptionEvent : NetworkEvent
 {
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 异常类型
+    /// </summary>
     public string ExceptionType { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 异常消息
+    /// </summary>
     public string Message { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 堆栈跟踪
+    /// </summary>
     public string? StackTrace { get; init; }
 }
 
@@ -147,10 +269,29 @@ public record NetworkExceptionEvent : NetworkEvent
 /// </summary>
 public record MaliciousPacketDetectedEvent : NetworkEvent
 {
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 玩家名称
+    /// </summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 数据包类型
+    /// </summary>
     public string PacketType { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 检测原因
+    /// </summary>
     public string Reason { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 是否已拦截
+    /// </summary>
     public bool WasBlocked { get; init; }
 }
 

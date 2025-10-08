@@ -117,12 +117,39 @@ public record MsptData
 /// </summary>
 public enum ServerType
 {
+    /// <summary>
+    /// 未知服务器类型
+    /// </summary>
     Unknown,
+    
+    /// <summary>
+    /// 原版服务器
+    /// </summary>
     Vanilla,
+    
+    /// <summary>
+    /// Paper 服务器
+    /// </summary>
     Paper,
+    
+    /// <summary>
+    /// Purpur 服务器
+    /// </summary>
     Purpur,
+    
+    /// <summary>
+    /// Spigot 服务器
+    /// </summary>
     Spigot,
+    
+    /// <summary>
+    /// Forge 服务器
+    /// </summary>
     Forge,
+    
+    /// <summary>
+    /// Fabric 服务器
+    /// </summary>
     Fabric
 }
 

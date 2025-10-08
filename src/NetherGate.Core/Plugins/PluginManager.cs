@@ -495,8 +495,7 @@ public class PluginManager
     }
 
     /// <summary>
-    /// 重载插件（简化实现）
-    /// 注意：完整的热重载需要更多复杂的实现，这里提供基础版本
+    /// 重载插件（完整热重载实现）
     /// </summary>
     public async Task<bool> ReloadPluginAsync(string pluginId)
     {
@@ -519,21 +518,79 @@ public class PluginManager
             var state = await SavePluginStateAsync(container);
 
             // 2. 禁用插件
-            await DisablePluginAsync(container);
+            if (container.State == PluginState.Enabled)
+            {
+                await DisablePluginAsync(container);
+            }
 
-            // 3. 卸载插件
+            // 3. 卸载插件程序集
             await UnloadPluginAsync(container);
 
-            // 4. 重新加载插件
-            // 注意：完整实现需要修改 PluginLoader 支持单个插件重载
-            // 这里简化处理，重新加载所有插件
-            _logger.Info($"插件 {container.Name} 已卸载，请重启 NetherGate 以完成重载");
-            
+            // 4. 使用 PluginLoader 重新加载插件（会重新扫描元数据）
+            if (!_pluginLoader.ReloadPlugin(container))
+            {
+                _logger.Error($"重新加载插件失败: {container.Name}");
+                return false;
+            }
+
+            // 5. 调用 OnLoad 生命周期
+            var context = new PluginContext(
+                container,
+                this,
+                _loggerFactory,
+                _eventBus,
+                _smpApi,
+                _commandManager,
+                _rconClient,
+                GetFileWatcher(),
+                GetServerFileAccess(),
+                GetBackupManager(),
+                GetPerformanceMonitor(),
+                GetPlayerDataReader(),
+                GetWorldDataReader(),
+                GetNbtDataWriter(),
+                GetItemComponentReader(),
+                GetItemComponentWriter(),
+                GetItemComponentConverter(),
+                GetNetworkEventListener(),
+                GetGameDisplayApi(),
+                _commandExecutor ?? new ServerCommandExecutor(new NetherGate.API.Configuration.NetherGateConfig(), _loggerFactory.CreateLogger("CmdExec"), null, _rconClient, _eventBus)
+            );
+
+            try
+            {
+                if (container.Instance == null)
+                {
+                    _logger.Error("插件实例为空");
+                    return false;
+                }
+                
+                await container.Instance.OnLoadAsync();
+                _logger.Info($"  OnLoad 完成: {container.Name}");
+            }
+            catch (Exception ex)
+            {
+                container.SetError($"OnLoad 失败: {ex.Message}", ex);
+                _logger.Error($"  OnLoad 失败: {container.Name}", ex);
+                return false;
+            }
+
+            // 6. 调用 OnEnable 生命周期（如果之前是启用状态）
+            if (state != null)
+            {
+                await EnablePluginAsync(container);
+                
+                // 恢复插件状态（如果插件支持）
+                await RestorePluginStateAsync(container, state);
+            }
+
+            _logger.Info($"插件重载成功: {container.Name}");
             return true;
         }
         catch (Exception ex)
         {
             _logger.Error($"插件重载失败: {container.Name}", ex);
+            container.SetError($"重载失败: {ex.Message}", ex);
             return false;
         }
     }

@@ -35,6 +35,14 @@ public class ConfigurationLoader
     /// </summary>
     public static NetherGateConfig Load()
     {
+        return Load(null);
+    }
+
+    /// <summary>
+    /// 加载配置（支持 YAML 和 JSON 格式，优先使用 YAML）
+    /// </summary>
+    public static NetherGateConfig Load(API.Logging.ILogger? logger)
+    {
         // 按优先级查找配置文件：YAML (.yaml) > YAML (.yml) > JSON
         string? configPath = null;
         ConfigFormat format = ConfigFormat.Yaml;
@@ -98,6 +106,27 @@ public class ConfigurationLoader
                 return CreateDefaultConfig();
             }
 
+            // 迁移配置（如果需要）
+            if (logger != null)
+            {
+                var migrator = new ConfigMigrator(logger);
+                if (migrator.NeedsMigration(config))
+                {
+                    config = migrator.Migrate(config);
+                    
+                    // 保存迁移后的配置
+                    try
+                    {
+                        SaveConfig(configPath, config, format);
+                        logger.Info($"已保存迁移后的配置到: {configPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Warning($"保存迁移后的配置失败: {ex.Message}");
+                    }
+                }
+            }
+
             // 验证配置
             ValidateConfig(config);
 
@@ -148,7 +177,10 @@ public class ConfigurationLoader
     {
         // 注意：所有配置类都已经在定义中设置了默认值
         // 这里只需要覆盖需要特别设置的值
-        var config = new NetherGateConfig();
+        var config = new NetherGateConfig
+        {
+            ConfigVersion = ConfigMigrator.LatestVersion
+        };
         
         // 设置必须修改的密钥和密码
         config.ServerConnection.Secret = "your-40-character-secret-token-here-change-this";

@@ -29,13 +29,15 @@ public class HelpCommand : ICommand
         // 补全命令名
         if (args.Length <= 1)
         {
-            var commands = _commandManager.GetAllCommands();
+			var commands = _commandManager.GetAllCommands();
             var prefix = args.Length == 1 ? args[0].ToLower() : "";
             
-            return commands.Keys
-                .Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(x => x)
-                .ToList();
+			return commands
+				.Where(kv => string.IsNullOrEmpty(kv.Value.Permission) || sender.HasPermission(kv.Value.Permission))
+				.Select(kv => kv.Key)
+				.Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+				.OrderBy(x => x)
+				.ToList();
         }
 
         return await Task.FromResult(new List<string>());
@@ -45,14 +47,27 @@ public class HelpCommand : ICommand
     {
         if (args.Length == 0)
         {
-            // 显示所有命令
-            var commands = _commandManager.GetAllCommands();
+			// 显示所有命令（按权限过滤）
+			var commands = _commandManager.GetAllCommands();
             var message = "可用命令:\n";
 
-            foreach (var (name, cmd) in commands.OrderBy(c => c.Key))
-            {
-                message += $"  {name,-15} - {cmd.Description}\n";
-            }
+			foreach (var (name, cmd) in commands
+				.Where(kv => string.IsNullOrEmpty(kv.Value.Permission) || sender.HasPermission(kv.Value.Permission))
+				.OrderBy(c => c.Key))
+			{
+				// 如果有命令树，展示第一条自动用法；否则展示描述
+				if (cmd is IHasCommandTree treeProvider)
+				{
+					var usages = treeProvider.CommandTree.GenerateUsageLines(cmd.Name);
+					var first = usages.FirstOrDefault();
+					if (!string.IsNullOrEmpty(first))
+					{
+						message += $"  {first}\n";
+						continue;
+					}
+				}
+				message += $"  {name,-15} - {cmd.Description}\n";
+			}
 
             message += "\n输入 'help <命令>' 查看详细用法";
             message += "\n注意: 游戏内执行命令需要加 # 前缀（例如: #help）";
@@ -60,6 +75,85 @@ public class HelpCommand : ICommand
         }
         else
         {
+            // 支持分页与搜索：
+            // - help search <keyword> [page] [pageSize]
+            // - help list [page] [pageSize]
+            if (args.Length >= 1 && string.Equals(args[0], "search", StringComparison.OrdinalIgnoreCase))
+            {
+                var keyword = args.Length >= 2 ? args[1].ToLower() : string.Empty;
+                int page = args.Length >= 3 && int.TryParse(args[2], out var p) ? Math.Max(1, p) : 1;
+                int pageSize = args.Length >= 4 && int.TryParse(args[3], out var ps) ? Math.Clamp(ps, 1, 50) : 10;
+
+                var all = _commandManager.GetAllCommands()
+                    .Where(kv => string.IsNullOrEmpty(kv.Value.Permission) || sender.HasPermission(kv.Value.Permission))
+                    .Select(kv => new { Name = kv.Key, Command = kv.Value })
+                    .Where(x => string.IsNullOrEmpty(keyword) ||
+                                x.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                                x.Command.Description.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                                (x.Command.Aliases?.Any(a => a.Contains(keyword, StringComparison.OrdinalIgnoreCase)) ?? false) ||
+                                (!string.IsNullOrEmpty(x.Command.Permission) && x.Command.Permission.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+                    .OrderBy(x => x.Name)
+                    .ToList();
+
+                var total = all.Count;
+                var totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
+                page = Math.Min(page, totalPages);
+                var items = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+                var msg = $"查询: '{keyword}'  结果: {total}  页: {page}/{totalPages}\n";
+                foreach (var x in items)
+                {
+                    if (x.Command is IHasCommandTree tp)
+                    {
+                        var usages = tp.CommandTree.GenerateUsageLines(x.Command.Name);
+                        var first = usages.FirstOrDefault();
+                        msg += string.IsNullOrEmpty(first)
+                            ? $"  {x.Name,-15} - {x.Command.Description}\n"
+                            : $"  {first}\n";
+                    }
+                    else
+                    {
+                        msg += $"  {x.Name,-15} - {x.Command.Description}\n";
+                    }
+                }
+                return Task.FromResult(CommandResult.Ok(msg));
+            }
+
+            if (args.Length >= 1 && string.Equals(args[0], "list", StringComparison.OrdinalIgnoreCase))
+            {
+                int page = args.Length >= 2 && int.TryParse(args[1], out var p) ? Math.Max(1, p) : 1;
+                int pageSize = args.Length >= 3 && int.TryParse(args[2], out var ps) ? Math.Clamp(ps, 1, 50) : 10;
+
+                var all = _commandManager.GetAllCommands()
+                    .Where(kv => string.IsNullOrEmpty(kv.Value.Permission) || sender.HasPermission(kv.Value.Permission))
+                    .Select(kv => new { Name = kv.Key, Command = kv.Value })
+                    .OrderBy(x => x.Name)
+                    .ToList();
+
+                var total = all.Count;
+                var totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
+                page = Math.Min(page, totalPages);
+                var items = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+                var msg = $"命令列表  总数: {total}  页: {page}/{totalPages}\n";
+                foreach (var x in items)
+                {
+                    if (x.Command is IHasCommandTree tp)
+                    {
+                        var usages = tp.CommandTree.GenerateUsageLines(x.Command.Name);
+                        var first = usages.FirstOrDefault();
+                        msg += string.IsNullOrEmpty(first)
+                            ? $"  {x.Name,-15} - {x.Command.Description}\n"
+                            : $"  {first}\n";
+                    }
+                    else
+                    {
+                        msg += $"  {x.Name,-15} - {x.Command.Description}\n";
+                    }
+                }
+                return Task.FromResult(CommandResult.Ok(msg));
+            }
+
             // 显示特定命令的帮助
             var commandName = args[0].ToLower();
             var commands = _commandManager.GetAllCommands();
@@ -73,6 +167,51 @@ public class HelpCommand : ICommand
                 if (command.Aliases.Count > 0)
                 {
                     message += $"别名: {string.Join(", ", command.Aliases)}\n";
+                }
+
+                // 如果命令实现了命令树，展示子命令、参数与权限
+                if (command is IHasCommandTree treeProvider)
+                {
+                    // 自动用法行
+                    var usageLines = treeProvider.CommandTree.GenerateUsageLines(command.Name);
+                    if (usageLines.Count > 0)
+                    {
+                        message += "用法（自动生成）：\n";
+                        foreach (var line in usageLines)
+                        {
+                            message += $"  {line}\n";
+                        }
+                    }
+
+                    var root = treeProvider.CommandTree.Root;
+                    // 展示一层子命令概览（按权限过滤）
+                    if (root.Children.Count > 0)
+                    {
+                        message += "子命令:\n";
+                        foreach (var (childName, child) in root.Children
+                            .Where(kv => string.IsNullOrEmpty(kv.Value.Permission) || sender.HasPermission(kv.Value.Permission))
+                            .OrderBy(kv => kv.Key))
+                        {
+                            var perm = string.IsNullOrEmpty(child.Permission) ? "" : $" [perm: {child.Permission}]";
+                            var desc = string.IsNullOrEmpty(child.Description) ? "" : $" - {child.Description}";
+                            var argSpecText = CommandNode.FormatArgs(child.ArgSpecs);
+                            var argText = string.IsNullOrEmpty(argSpecText) ? "" : $" {argSpecText}";
+                            message += $"  {childName}{argText}{perm}{desc}\n";
+                        }
+                    }
+                    else if (root.ArgSpecs.Count > 0)
+                    {
+                        message += "参数:\n";
+                        foreach (var spec in root.ArgSpecs)
+                        {
+                            var req = spec.Required ? "必需" : "可选";
+                            var type = spec.Type.ToString();
+                            var enumText = (spec.Type == CommandArgType.Enum && spec.EnumValues is { Count: >0 })
+                                ? $" ({string.Join("|", spec.EnumValues)})"
+                                : "";
+                            message += $"  {spec.Name} <{type}>{enumText} - {req}\n";
+                        }
+                    }
                 }
 
                 message += $"插件: {command.PluginId}";
@@ -90,10 +229,11 @@ public class HelpCommand : ICommand
 /// <summary>
 /// Plugin 命令 - 管理插件
 /// </summary>
-public class PluginCommand : ICommand
+public class PluginCommand : ICommand, IHasCommandTree, IParsedCommand
 {
     private readonly PluginManager _pluginManager;
     private readonly ILogger _logger;
+    private readonly CommandTree _commandTree;
 
     public string Name => "plugin";
     public string Description => "管理插件（list/reload/enable/disable/info）";
@@ -106,7 +246,53 @@ public class PluginCommand : ICommand
     {
         _pluginManager = pluginManager;
         _logger = logger;
+
+		// 构建命令树（用于 Help/Tab 补全）
+		_commandTree = new CommandTree("plugin", "管理插件", Permission);
+		var root = _commandTree.Root;
+
+		// 子命令
+		root.Sub("list", "显示所有插件", Permission);
+		root.Sub("reload", "重载插件", Permission)
+			.ArgSpec("pluginId", CommandArgType.Enum, required: true, enumValues: new[] { "all" })
+			.Arg(0, async (sender, args) =>
+			{
+				var ids = _pluginManager.GetAllPluginContainers().Select(p => p.Metadata.Id);
+				return await Task.FromResult(new[] { "all" }.Concat(ids));
+			});
+		root.Sub("enable", "启用插件", Permission)
+			.ArgSpec("pluginId", CommandArgType.String, required: true)
+			.Arg(0, async (sender, args) =>
+			{
+				var ids = _pluginManager.GetAllPluginContainers().Select(p => p.Metadata.Id);
+				return await Task.FromResult(ids);
+			});
+		root.Sub("disable", "禁用插件", Permission)
+			.ArgSpec("pluginId", CommandArgType.String, required: true)
+			.Arg(0, async (sender, args) =>
+			{
+				var ids = _pluginManager.GetAllPluginContainers().Select(p => p.Metadata.Id);
+				return await Task.FromResult(ids);
+			});
+		root.Sub("info", "查看插件信息", Permission)
+			.ArgSpec("pluginId", CommandArgType.String, required: true)
+			.Arg(0, async (sender, args) =>
+			{
+				var ids = _pluginManager.GetAllPluginContainers().Select(p => p.Metadata.Id);
+				return await Task.FromResult(ids);
+			});
+		root.Sub("load", "加载新插件", Permission)
+			.ArgSpec("pluginId", CommandArgType.String, required: true);
+		root.Sub("unload", "卸载插件", Permission)
+			.ArgSpec("pluginId", CommandArgType.String, required: true)
+			.Arg(0, async (sender, args) =>
+			{
+				var ids = _pluginManager.GetAllPluginContainers().Select(p => p.Metadata.Id);
+				return await Task.FromResult(ids);
+			});
     }
+
+    CommandTree IHasCommandTree.CommandTree => _commandTree;
 
     public async Task<List<string>> TabCompleteAsync(ICommandSender sender, string[] args)
     {
@@ -173,6 +359,55 @@ public class PluginCommand : ICommand
             "unload" => await UnloadPluginAsync(args),
             _ => CommandResult.Fail($"未知子命令: {subcommand}\n使用 'plugin' 查看帮助")
         };
+    }
+
+    public async Task<CommandResult> ExecuteParsedAsync(ICommandSender sender, IReadOnlyList<object?> positionalArgs, IReadOnlyDictionary<string, object?> namedArgs)
+    {
+        var sub = namedArgs.TryGetValue("__subcommand", out var sc) ? sc as string : null;
+        if (string.IsNullOrEmpty(sub))
+        {
+            return CommandResult.Fail($"用法: {Usage}");
+        }
+
+        switch (sub.ToLowerInvariant())
+        {
+            case "list":
+            case "ls":
+                return await ListPluginsAsync();
+            case "reload":
+            case "rl":
+            {
+                var pluginId = namedArgs.TryGetValue("pluginId", out var v) ? v as string : (positionalArgs.Count > 0 ? positionalArgs[0]?.ToString() : null);
+                return await ReloadPluginAsync(new string[] { "reload", pluginId ?? string.Empty });
+            }
+            case "enable":
+            {
+                var pluginId = namedArgs.TryGetValue("pluginId", out var v) ? v as string : (positionalArgs.Count > 0 ? positionalArgs[0]?.ToString() : null);
+                return await EnablePluginAsync(new string[] { "enable", pluginId ?? string.Empty });
+            }
+            case "disable":
+            {
+                var pluginId = namedArgs.TryGetValue("pluginId", out var v) ? v as string : (positionalArgs.Count > 0 ? positionalArgs[0]?.ToString() : null);
+                return await DisablePluginAsync(new string[] { "disable", pluginId ?? string.Empty });
+            }
+            case "info":
+            {
+                var pluginId = namedArgs.TryGetValue("pluginId", out var v) ? v as string : (positionalArgs.Count > 0 ? positionalArgs[0]?.ToString() : null);
+                return await InfoPluginAsync(new string[] { "info", pluginId ?? string.Empty });
+            }
+            case "load":
+            {
+                var pluginId = namedArgs.TryGetValue("pluginId", out var v) ? v as string : (positionalArgs.Count > 0 ? positionalArgs[0]?.ToString() : null);
+                return await LoadPluginAsync(new string[] { "load", pluginId ?? string.Empty });
+            }
+            case "unload":
+            {
+                var pluginId = namedArgs.TryGetValue("pluginId", out var v) ? v as string : (positionalArgs.Count > 0 ? positionalArgs[0]?.ToString() : null);
+                return await UnloadPluginAsync(new string[] { "unload", pluginId ?? string.Empty });
+            }
+            default:
+                return CommandResult.Fail($"未知子命令: {sub}");
+        }
     }
 
     private Task<CommandResult> ListPluginsAsync()
@@ -450,8 +685,9 @@ public class PluginsCommand : ICommand
 /// <summary>
 /// Stop 命令
 /// </summary>
-public class StopCommand : ICommand
+public class StopCommand : ICommand, IHasCommandTree
 {
+    private readonly CommandTree _tree = new CommandTree("stop", "停止 NetherGate", "nethergate.admin.stop");
     public string Name => "stop";
     public string Description => "停止 NetherGate";
     public string Usage => "stop";
@@ -464,13 +700,16 @@ public class StopCommand : ICommand
         // 这个命令由 Program.cs 中的命令循环处理
         return Task.FromResult(CommandResult.Ok("正在停止 NetherGate..."));
     }
+
+    CommandTree IHasCommandTree.CommandTree => _tree;
 }
 
 /// <summary>
 /// Version 命令
 /// </summary>
-public class VersionCommand : ICommand
+public class VersionCommand : ICommand, IHasCommandTree
 {
+    private readonly CommandTree _tree = new CommandTree("version", "显示 NetherGate 版本信息");
     public string Name => "version";
     public string Description => "显示 NetherGate 版本信息";
     public string Usage => "version";
@@ -486,15 +725,18 @@ public class VersionCommand : ICommand
 
         return Task.FromResult(CommandResult.Ok(message));
     }
+
+    CommandTree IHasCommandTree.CommandTree => _tree;
 }
 
 /// <summary>
 /// Status 命令
 /// </summary>
-public class StatusCommand : ICommand
+public class StatusCommand : ICommand, IHasCommandTree
 {
     private readonly ISmpApi _smpApi;
     private readonly ILogger _logger;
+    private readonly CommandTree _tree = new CommandTree("status", "显示服务器状态", "nethergate.status");
 
     public string Name => "status";
     public string Description => "显示服务器状态";
@@ -538,5 +780,7 @@ public class StatusCommand : ICommand
             return CommandResult.Fail($"获取服务器状态失败: {ex.Message}");
         }
     }
+
+    CommandTree IHasCommandTree.CommandTree => _tree;
 }
 

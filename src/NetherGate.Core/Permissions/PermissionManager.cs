@@ -310,6 +310,26 @@ public class PermissionManager : IPermissionManager
         }
     }
 
+    public List<string> GetAllUsers()
+    {
+        lock (_lock)
+        {
+            // 汇总所有出现在玩家-组映射和玩家特定权限中的名字
+            var users = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var u in _playerGroups.Keys) users.Add(u);
+            foreach (var u in _playerPermissions.Keys) users.Add(u);
+            return users.OrderBy(u => u, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
+
+    public List<string> GetAllGroups()
+    {
+        lock (_lock)
+        {
+            return _groups.Keys.OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
+
     /// <summary>
     /// 重新加载权限配置
     /// </summary>

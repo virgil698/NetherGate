@@ -1,18 +1,19 @@
 using NetherGate.API.Events;
 using NetherGate.API.Logging;
-using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace NetherGate.Core.Process;
 
 /// <summary>
 /// Minecraft 服务器日志解析器
-/// 解析服务器输出日志，提取事件信息
+/// 解析服务器输出日志，提取事件信息，支持插件注册自定义匹配器
 /// </summary>
 public class LogParser
 {
     private readonly ILogger _logger;
     private readonly IEventBus _eventBus;
+    private readonly List<ILogMatcher> _matchers = new();
+    private readonly object _matcherLock = new();
 
     // 日志格式正则表达式
     // 示例: [19:45:30] [Server thread/INFO]: <Player> Hello world
@@ -26,43 +27,33 @@ public class LogParser
         @"^\[(\d{2}:\d{2}:\d{2})\s+([A-Z]+)\s*\]:\s+(.+)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // 注意: 玩家加入/离开事件由 SMP 协议提供（更可靠、更及时）
-    // 此处仅解析 SMP 不支持的事件
-
-    // 玩家聊天: <Player> message
-    private static readonly Regex PlayerChatPattern = new(
-        @"^<(\w+)> (.+)$",
-        RegexOptions.Compiled);
-
-    // 玩家命令: Player issued server command: /command args
-    private static readonly Regex PlayerCommandPattern = new(
-        @"^(\w+) issued server command: (.+)$",
-        RegexOptions.Compiled);
-
-    // 玩家死亡: Player was killed by Zombie
-    private static readonly Regex PlayerDeathPattern = new(
-        @"^(\w+) (.+)$",
-        RegexOptions.Compiled);
-
-    // 玩家成就: Player has made the advancement [Achievement Name]
-    private static readonly Regex PlayerAchievementPattern = new(
-        @"^(\w+) has made the advancement \[(.+)\]$",
-        RegexOptions.Compiled);
-
-    // 服务器启动完成: Done (X.XXXs)! For help, type "help"
-    private static readonly Regex ServerReadyPattern = new(
-        @"Done \(([\d.]+)s\)!?",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-
-    // 服务器准备关闭: Stopping server
-    private static readonly Regex ServerStoppingPattern = new(
-        @"^Stopping server$",
-        RegexOptions.Compiled);
-
     public LogParser(ILogger logger, IEventBus eventBus)
     {
         _logger = logger;
         _eventBus = eventBus;
+
+        // 注册内置匹配器
+        RegisterMatcher(new ServerReadyMatcher());
+        RegisterMatcher(new ServerStoppingMatcher());
+        RegisterMatcher(new PlayerJoinMatcher());
+        RegisterMatcher(new PlayerLeaveMatcher());
+        RegisterMatcher(new PlayerChatMatcher());
+        RegisterMatcher(new PlayerCommandMatcher());
+        RegisterMatcher(new PlayerAchievementMatcher());
+        RegisterMatcher(new PlayerDeathMatcher());
+    }
+
+    /// <summary>
+    /// 注册自定义日志匹配器
+    /// </summary>
+    public void RegisterMatcher(ILogMatcher matcher)
+    {
+        lock (_matcherLock)
+        {
+            _matchers.Add(matcher);
+            // 按优先级降序排序
+            _matchers.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+        }
     }
 
     /// <summary>
@@ -88,7 +79,7 @@ public class LogParser
                 await PublishLogEventAsync(level, message, thread);
 
                 // 尝试解析特定事件
-                await TryParseSpecificEventsAsync(message);
+                await TryParseSpecificEventsAsync(message, level, thread);
                 return;
             }
 
@@ -101,7 +92,7 @@ public class LogParser
                 var message = altMatch.Groups[3].Value;
 
                 await PublishLogEventAsync(level, message);
-                await TryParseSpecificEventsAsync(message);
+                await TryParseSpecificEventsAsync(message, level);
                 return;
             }
 
@@ -126,97 +117,43 @@ public class LogParser
     }
 
     /// <summary>
-    /// 尝试解析特定事件
-    /// 注意: 玩家加入/离开事件由 SMP 协议提供，此处不再解析
+    /// 尝试解析特定事件（使用匹配器管线）
     /// </summary>
-    private async Task TryParseSpecificEventsAsync(string message)
+    private async Task TryParseSpecificEventsAsync(string message, string level = "INFO", string? thread = null)
     {
-        // 调试：记录接收到的消息
-        if (message.Contains("Done", StringComparison.OrdinalIgnoreCase))
+        ILogMatcher[] matchers;
+        lock (_matcherLock)
         {
-            _logger.Debug($"[LogParser] 检测到包含 Done 的消息: {message}");
-        }
-        
-        // 服务器启动完成
-        var readyMatch = ServerReadyPattern.Match(message);
-        if (readyMatch.Success)
-        {
-            var startupTime = double.Parse(readyMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-            
-            _logger.Info("========================================");
-            _logger.Info($" 检测到服务器启动完成！");
-            _logger.Info($" 启动耗时: {startupTime:F3} 秒");
-            _logger.Info("========================================");
-            
-            await _eventBus.PublishAsync(new ServerReadyEvent
-            {
-                StartupTimeSeconds = startupTime
-            });
-            return;
-        }
-        else if (message.Contains("Done", StringComparison.OrdinalIgnoreCase))
-        {
-            // 调试：正则匹配失败
-            _logger.Warning($"[LogParser] Done 关键词存在但正则匹配失败！");
-            _logger.Warning($"[LogParser] 消息内容: [{message}]");
-            _logger.Warning($"[LogParser] 正则模式: ^Done \\(([\\d.]+)s\\)! For help");
+            matchers = _matchers.ToArray();
         }
 
-        // 服务器准备关闭
-        if (ServerStoppingPattern.IsMatch(message))
+        foreach (var matcher in matchers)
         {
-            await _eventBus.PublishAsync(new ServerShuttingDownEvent());
-            _logger.Info("服务器正在关闭...");
-            return;
-        }
-
-        // 玩家聊天
-        var chatMatch = PlayerChatPattern.Match(message);
-        if (chatMatch.Success)
-        {
-            await _eventBus.PublishAsync(new PlayerChatEvent
+            try
             {
-                PlayerName = chatMatch.Groups[1].Value,
-                Message = chatMatch.Groups[2].Value
-            });
-            return;
-        }
-
-        // 玩家命令
-        var commandMatch = PlayerCommandPattern.Match(message);
-        if (commandMatch.Success)
-        {
-            await _eventBus.PublishAsync(new PlayerCommandEvent
-            {
-                PlayerName = commandMatch.Groups[1].Value,
-                Command = commandMatch.Groups[2].Value
-            });
-            return;
-        }
-
-        // 玩家成就
-        var achievementMatch = PlayerAchievementPattern.Match(message);
-        if (achievementMatch.Success)
-        {
-            await _eventBus.PublishAsync(new PlayerAchievementEvent
-            {
-                PlayerName = achievementMatch.Groups[1].Value,
-                Achievement = achievementMatch.Groups[2].Value
-            });
-            return;
-        }
-
-        // 玩家死亡（需要更复杂的判断，因为死亡消息格式多样）
-        if (IsDeathMessage(message))
-        {
-            var deathMatch = PlayerDeathPattern.Match(message);
-            if (deathMatch.Success)
-            {
-                await _eventBus.PublishAsync(new PlayerDeathEvent
+                var evt = matcher.TryMatch(message, level, thread);
+                if (evt != null)
                 {
-                    PlayerName = deathMatch.Groups[1].Value,
-                    DeathMessage = message
-                });
+                    // 特殊处理 ServerReadyEvent 的日志输出
+                    if (evt is ServerReadyEvent readyEvent)
+                    {
+                        _logger.Info("========================================");
+                        _logger.Info($" 检测到服务器启动完成！");
+                        _logger.Info($" 启动耗时: {readyEvent.StartupTimeSeconds:F3} 秒");
+                        _logger.Info("========================================");
+                    }
+                    else if (evt is ServerShuttingDownEvent)
+                    {
+                        _logger.Info("服务器正在关闭...");
+                    }
+
+                    await _eventBus.PublishAsync(evt);
+                    return; // 匹配成功，停止后续匹配
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"日志匹配器 {matcher.GetType().Name} 执行失败", ex);
             }
         }
     }
@@ -256,19 +193,5 @@ public class LogParser
         });
     }
 
-    /// <summary>
-    /// 判断是否为死亡消息
-    /// </summary>
-    private bool IsDeathMessage(string message)
-    {
-        var deathKeywords = new[]
-        {
-            "was killed", "was slain", "died", "drowned", "burned",
-            "fell", "was shot", "blown up", "hit the ground",
-            "went up in flames", "walked into fire", "suffocated"
-        };
-
-        return deathKeywords.Any(keyword => message.Contains(keyword, StringComparison.OrdinalIgnoreCase));
-    }
 }
 

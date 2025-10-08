@@ -7,15 +7,27 @@ namespace NetherGate.API.Protocol;
 /// </summary>
 public class JsonRpcRequest
 {
+    /// <summary>
+    /// JSON-RPC 协议版本
+    /// </summary>
     [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; set; } = "2.0";
 
+    /// <summary>
+    /// 请求 ID
+    /// </summary>
     [JsonPropertyName("id")]
     public object? Id { get; set; }
 
+    /// <summary>
+    /// 方法名
+    /// </summary>
     [JsonPropertyName("method")]
     public string Method { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 参数
+    /// </summary>
     [JsonPropertyName("params")]
     public object? Params { get; set; }
 }
@@ -25,18 +37,33 @@ public class JsonRpcRequest
 /// </summary>
 public class JsonRpcResponse
 {
+    /// <summary>
+    /// JSON-RPC 协议版本
+    /// </summary>
     [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; set; } = "2.0";
 
+    /// <summary>
+    /// 请求 ID
+    /// </summary>
     [JsonPropertyName("id")]
     public object? Id { get; set; }
 
+    /// <summary>
+    /// 结果
+    /// </summary>
     [JsonPropertyName("result")]
     public object? Result { get; set; }
 
+    /// <summary>
+    /// 错误信息
+    /// </summary>
     [JsonPropertyName("error")]
     public JsonRpcError? Error { get; set; }
 
+    /// <summary>
+    /// 是否成功
+    /// </summary>
     [JsonIgnore]
     public bool IsSuccess => Error == null;
 }
@@ -46,12 +73,21 @@ public class JsonRpcResponse
 /// </summary>
 public class JsonRpcError
 {
+    /// <summary>
+    /// 错误代码
+    /// </summary>
     [JsonPropertyName("code")]
     public int Code { get; set; }
 
+    /// <summary>
+    /// 错误消息
+    /// </summary>
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 附加数据
+    /// </summary>
     [JsonPropertyName("data")]
     public object? Data { get; set; }
 }
@@ -61,12 +97,21 @@ public class JsonRpcError
 /// </summary>
 public class JsonRpcNotification
 {
+    /// <summary>
+    /// JSON-RPC 协议版本
+    /// </summary>
     [JsonPropertyName("jsonrpc")]
     public string JsonRpc { get; set; } = "2.0";
 
+    /// <summary>
+    /// 方法名
+    /// </summary>
     [JsonPropertyName("method")]
     public string Method { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 参数
+    /// </summary>
     [JsonPropertyName("params")]
     public object? Params { get; set; }
 
@@ -100,10 +145,29 @@ public class JsonRpcNotification
 /// </summary>
 public static class JsonRpcErrorCodes
 {
+    /// <summary>
+    /// 解析错误
+    /// </summary>
     public const int ParseError = -32700;
+    
+    /// <summary>
+    /// 无效请求
+    /// </summary>
     public const int InvalidRequest = -32600;
+    
+    /// <summary>
+    /// 方法未找到
+    /// </summary>
     public const int MethodNotFound = -32601;
+    
+    /// <summary>
+    /// 无效参数
+    /// </summary>
     public const int InvalidParams = -32602;
+    
+    /// <summary>
+    /// 内部错误
+    /// </summary>
     public const int InternalError = -32603;
 }
 

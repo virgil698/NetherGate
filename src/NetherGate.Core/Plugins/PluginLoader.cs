@@ -76,36 +76,14 @@ public class PluginLoader
     /// </summary>
     private PluginContainer? ScanPlugin(string pluginDirectory)
     {
-        // 1. 读取 plugin.json
-        var metadataPath = Path.Combine(pluginDirectory, "plugin.json");
-        if (!File.Exists(metadataPath))
-        {
-            _logger.Warning($"插件目录缺少 plugin.json: {pluginDirectory}");
-            return null;
-        }
-
-        var json = File.ReadAllText(metadataPath);
-        var metadata = JsonSerializer.Deserialize<PluginMetadata>(json);
-
+        // 1. 读取元数据
+        var metadata = ScanPluginMetadataFromDirectory(pluginDirectory);
         if (metadata == null)
         {
-            _logger.Error($"无法解析 plugin.json: {metadataPath}");
             return null;
         }
 
-        // 2. 验证元数据
-        var errors = metadata.Validate();
-        if (errors.Count > 0)
-        {
-            _logger.Error($"插件元数据验证失败: {metadata.Name}");
-            foreach (var error in errors)
-            {
-                _logger.Error($"  - {error}");
-            }
-            return null;
-        }
-
-        // 3. 查找插件 DLL
+        // 2. 查找插件 DLL
         var pluginName = Path.GetFileName(pluginDirectory);
         var assemblyPath = Path.Combine(pluginDirectory, $"{pluginName}.dll");
 
@@ -115,7 +93,7 @@ public class PluginLoader
             return null;
         }
 
-        // 4. 创建插件数据目录
+        // 3. 创建插件数据目录
         var dataDirectory = Path.Combine(_configDirectory, metadata.Id);
         if (!Directory.Exists(dataDirectory))
         {
@@ -123,8 +101,60 @@ public class PluginLoader
             _logger.Debug($"创建插件数据目录: {dataDirectory}");
         }
 
-        // 5. 创建容器
+        // 4. 创建容器
         return new PluginContainer(metadata, pluginDirectory, assemblyPath, dataDirectory);
+    }
+
+    /// <summary>
+    /// 从插件目录扫描元数据
+    /// </summary>
+    private PluginMetadata? ScanPluginMetadataFromDirectory(string pluginDirectory)
+    {
+        var metadataPath = Path.Combine(pluginDirectory, "plugin.json");
+        if (!File.Exists(metadataPath))
+        {
+            _logger.Warning($"插件目录缺少 plugin.json: {pluginDirectory}");
+            return null;
+        }
+
+        return ScanPluginMetadata(metadataPath);
+    }
+
+    /// <summary>
+    /// 从 plugin.json 文件读取元数据
+    /// </summary>
+    private PluginMetadata? ScanPluginMetadata(string metadataPath)
+    {
+        try
+        {
+            var json = File.ReadAllText(metadataPath);
+            var metadata = JsonSerializer.Deserialize<PluginMetadata>(json);
+
+            if (metadata == null)
+            {
+                _logger.Error($"无法解析 plugin.json: {metadataPath}");
+                return null;
+            }
+
+            // 验证元数据
+            var errors = metadata.Validate();
+            if (errors.Count > 0)
+            {
+                _logger.Error($"插件元数据验证失败: {metadata.Name}");
+                foreach (var error in errors)
+                {
+                    _logger.Error($"  - {error}");
+                }
+                return null;
+            }
+
+            return metadata;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"读取插件元数据失败: {metadataPath}", ex);
+            return null;
+        }
     }
 
     /// <summary>
@@ -229,17 +259,64 @@ public class PluginLoader
     }
 
     /// <summary>
-    /// 重载插件
+    /// 重载插件（完整流程：卸载 → 重新扫描 → 加载）
     /// </summary>
     public bool ReloadPlugin(PluginContainer container)
     {
         _logger.Info($"重载插件: {container.Name}");
 
+        // 1. 卸载旧插件
         if (!UnloadPlugin(container))
         {
             return false;
         }
 
+        // 2. 重新扫描插件目录，获取最新的元数据
+        var assemblyPath = container.AssemblyPath;
+        if (!File.Exists(assemblyPath))
+        {
+            _logger.Error($"插件文件不存在: {assemblyPath}");
+            return false;
+        }
+
+        try
+        {
+            // 重新读取元数据（从插件目录的 plugin.json）
+            var pluginDirectory = Path.GetDirectoryName(assemblyPath);
+            if (string.IsNullOrEmpty(pluginDirectory))
+            {
+                _logger.Error($"无法获取插件目录: {assemblyPath}");
+                return false;
+            }
+
+            var metadata = ScanPluginMetadataFromDirectory(pluginDirectory);
+            if (metadata == null)
+            {
+                _logger.Error($"无法读取插件元数据: {pluginDirectory}");
+                return false;
+            }
+
+            // 使用反射更新容器的 Metadata 字段（因为它是只读属性）
+            var metadataField = typeof(PluginContainer).GetField("<Metadata>k__BackingField", 
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            
+            if (metadataField != null)
+            {
+                metadataField.SetValue(container, metadata);
+                _logger.Info($"  已更新插件元数据: {metadata.Name} v{metadata.Version}");
+            }
+            else
+            {
+                _logger.Warning("  无法更新元数据（反射失败），使用旧元数据继续");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"  重新扫描插件元数据失败: {ex.Message}", ex);
+            return false;
+        }
+
+        // 3. 加载新插件
         return LoadPlugin(container);
     }
 }

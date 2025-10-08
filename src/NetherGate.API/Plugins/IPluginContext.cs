@@ -3,9 +3,11 @@ using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
 using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
+using NetherGate.API.Localization;
 using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
 using NetherGate.API.Protocol;
+using NetherGate.API.Scheduling;
 
 namespace NetherGate.API.Plugins;
 
@@ -127,6 +129,16 @@ public interface IPluginContext
     /// 用于在游戏中显示 BossBar、Title、ActionBar、计分板等
     /// </summary>
     IGameDisplayApi GameDisplay { get; }
+
+    /// <summary>
+    /// 多语言服务（按插件数据目录 lang/{locale}.json 加载）
+    /// </summary>
+    II18nService I18n { get; }
+
+    /// <summary>
+    /// 调度器（延时/周期任务）
+    /// </summary>
+    IScheduler Scheduler { get; }
 
     /// <summary>
     /// NBT 数据写入器

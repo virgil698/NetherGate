@@ -25,6 +25,9 @@ public abstract record SmpEvent
 /// </summary>
 public record AllowlistChangedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "allowlist_changed";
     
     /// <summary>
@@ -45,8 +48,14 @@ public record AllowlistChangedEvent : SmpEvent
 /// </summary>
 public record PlayerBannedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "player_banned";
     
+    /// <summary>
+    /// 封禁信息
+    /// </summary>
     public UserBanDto Ban { get; init; } = new();
 }
 
@@ -55,8 +64,14 @@ public record PlayerBannedEvent : SmpEvent
 /// </summary>
 public record PlayerUnbannedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "player_unbanned";
     
+    /// <summary>
+    /// 玩家信息
+    /// </summary>
     public PlayerDto Player { get; init; } = new();
 }
 
@@ -65,8 +80,14 @@ public record PlayerUnbannedEvent : SmpEvent
 /// </summary>
 public record IpBannedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "ip_banned";
     
+    /// <summary>
+    /// 封禁信息
+    /// </summary>
     public IpBanDto Ban { get; init; } = new();
 }
 
@@ -75,8 +96,14 @@ public record IpBannedEvent : SmpEvent
 /// </summary>
 public record IpUnbannedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "ip_unbanned";
     
+    /// <summary>
+    /// IP 地址
+    /// </summary>
     public string Ip { get; init; } = string.Empty;
 }
 
@@ -87,8 +114,14 @@ public record IpUnbannedEvent : SmpEvent
 /// </summary>
 public record PlayerJoinedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "player_joined";
     
+    /// <summary>
+    /// 玩家信息
+    /// </summary>
     public PlayerDto Player { get; init; } = new();
 }
 
@@ -97,8 +130,14 @@ public record PlayerJoinedEvent : SmpEvent
 /// </summary>
 public record PlayerLeftEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "player_left";
     
+    /// <summary>
+    /// 玩家信息
+    /// </summary>
     public PlayerDto Player { get; init; } = new();
 }
 
@@ -107,9 +146,19 @@ public record PlayerLeftEvent : SmpEvent
 /// </summary>
 public record PlayerKickedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "player_kicked";
     
+    /// <summary>
+    /// 玩家信息
+    /// </summary>
     public PlayerDto Player { get; init; } = new();
+    
+    /// <summary>
+    /// 踢出原因
+    /// </summary>
     public string? Reason { get; init; }
 }
 
@@ -120,8 +169,14 @@ public record PlayerKickedEvent : SmpEvent
 /// </summary>
 public record OperatorAddedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "operator_added";
     
+    /// <summary>
+    /// 管理员信息
+    /// </summary>
     public OperatorDto Operator { get; init; } = new();
 }
 
@@ -130,8 +185,14 @@ public record OperatorAddedEvent : SmpEvent
 /// </summary>
 public record OperatorRemovedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "operator_removed";
     
+    /// <summary>
+    /// 玩家信息
+    /// </summary>
     public PlayerDto Player { get; init; } = new();
 }
 
@@ -142,8 +203,14 @@ public record OperatorRemovedEvent : SmpEvent
 /// </summary>
 public record ServerStartedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "server_started";
     
+    /// <summary>
+    /// 版本信息
+    /// </summary>
     public VersionInfo Version { get; init; } = new();
 }
 
@@ -152,6 +219,9 @@ public record ServerStartedEvent : SmpEvent
 /// </summary>
 public record ServerStoppingEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "server_stopping";
 }
 
@@ -160,8 +230,14 @@ public record ServerStoppingEvent : SmpEvent
 /// </summary>
 public record ServerCrashedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "server_crashed";
     
+    /// <summary>
+    /// 崩溃原因
+    /// </summary>
     public string? Reason { get; init; }
 }
 
@@ -170,6 +246,9 @@ public record ServerCrashedEvent : SmpEvent
 /// </summary>
 public record WorldSavedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "world_saved";
 }
 
@@ -180,10 +259,24 @@ public record WorldSavedEvent : SmpEvent
 /// </summary>
 public record GameRuleChangedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "gamerule_changed";
     
+    /// <summary>
+    /// 游戏规则名称
+    /// </summary>
     public string Rule { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 旧值
+    /// </summary>
     public object? OldValue { get; init; }
+    
+    /// <summary>
+    /// 新值
+    /// </summary>
     public object? NewValue { get; init; }
 }
 
@@ -194,10 +287,24 @@ public record GameRuleChangedEvent : SmpEvent
 /// </summary>
 public record ServerSettingChangedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "server_setting_changed";
     
+    /// <summary>
+    /// 设置键名
+    /// </summary>
     public string Key { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// 旧值
+    /// </summary>
     public object? OldValue { get; init; }
+    
+    /// <summary>
+    /// 新值
+    /// </summary>
     public object? NewValue { get; init; }
 }
 
@@ -208,6 +315,9 @@ public record ServerSettingChangedEvent : SmpEvent
 /// </summary>
 public record SmpConnectedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "smp_connected";
 }
 
@@ -216,8 +326,14 @@ public record SmpConnectedEvent : SmpEvent
 /// </summary>
 public record SmpDisconnectedEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "smp_disconnected";
     
+    /// <summary>
+    /// 断开原因
+    /// </summary>
     public string? Reason { get; init; }
 }
 
@@ -226,9 +342,19 @@ public record SmpDisconnectedEvent : SmpEvent
 /// </summary>
 public record SmpReconnectingEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "smp_reconnecting";
     
+    /// <summary>
+    /// 当前重试次数
+    /// </summary>
     public int Attempt { get; init; }
+    
+    /// <summary>
+    /// 最大重试次数
+    /// </summary>
     public int MaxAttempts { get; init; }
 }
 
@@ -240,6 +366,9 @@ public record SmpReconnectingEvent : SmpEvent
 /// </summary>
 public record ServerHeartbeatEvent : SmpEvent
 {
+    /// <summary>
+    /// 事件类型
+    /// </summary>
     public override string EventType => "server_heartbeat";
     
     /// <summary>
