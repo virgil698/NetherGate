@@ -197,10 +197,6 @@ cd MyPlugin
 dotnet add package NetherGate.API --source https://nuget.pkg.github.com/virgil698/index.json
 ```
 
-> 💡 **Get GitHub Token**: Go to [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens) to create a token with `read:packages` permission.
-
-[![GitHub Package](https://img.shields.io/badge/GitHub-Package-blue?logo=github)](https://github.com/virgil698/NetherGate/packages)
-
 ### **2. Write Code**
 
 ```csharp
