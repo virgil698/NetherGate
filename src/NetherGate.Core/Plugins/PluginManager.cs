@@ -7,6 +7,7 @@ using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
 using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
+using NetherGate.API.Permissions;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
 using NetherGate.API.Utilities;
@@ -15,6 +16,7 @@ using NetherGate.Core.Data;
 using NetherGate.Core.FileSystem;
 using NetherGate.Core.GameDisplay;
 using NetherGate.Core.Monitoring;
+using NetherGate.Core.Permissions;
 using NetherGate.Core.Protocol;
 using NetherGate.Core.Utilities;
 
@@ -58,6 +60,7 @@ public class PluginManager
     private IBlockDataWriter? _blockDataWriter;
     private IGameUtilities? _gameUtilities;
     private IMusicPlayer? _musicPlayer;
+    private IPermissionManager? _permissionManager;
 
     public PluginManager(
         ILoggerFactory loggerFactory,
@@ -219,6 +222,17 @@ public class PluginManager
             );
         }
         return _musicPlayer;
+    }
+
+    private IPermissionManager GetPermissionManager()
+    {
+        if (_permissionManager == null)
+        {
+            // 使用默认权限管理器（允许所有操作）
+            // 真正的权限管理由插件提供
+            _permissionManager = new DefaultPermissionManager(_logger);
+        }
+        return _permissionManager;
     }
     
     /// <summary>
@@ -384,7 +398,8 @@ public class PluginManager
                 GetBlockDataReader(),
                 _rconClient != null ? GetBlockDataWriter() : null!,
                 _rconClient != null ? GetGameUtilities() : null!,
-                GetMusicPlayer()
+                GetMusicPlayer(),
+                GetPermissionManager()
             );
 
             // 通过反射设置 Context 属性（如果存在）
@@ -633,7 +648,8 @@ public class PluginManager
                 GetBlockDataReader(),
                 _rconClient != null ? GetBlockDataWriter() : null!,
                 _rconClient != null ? GetGameUtilities() : null!,
-                GetMusicPlayer()
+                GetMusicPlayer(),
+                GetPermissionManager()
             );
 
             try

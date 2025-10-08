@@ -7,6 +7,7 @@ using NetherGate.API.Logging;
 using NetherGate.API.Localization;
 using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
+using NetherGate.API.Permissions;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
 using NetherGate.API.Scheduling;
@@ -46,6 +47,7 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly IBlockDataWriter? _blockDataWriter;
     private readonly IGameUtilities? _gameUtilities;
     private readonly IMusicPlayer _musicPlayer;
+    private readonly IPermissionManager _permissionManager;
 
     public PluginInfo PluginInfo { get; }
     public string DataDirectory { get; }
@@ -77,6 +79,7 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     public IBlockDataWriter BlockDataWriter => _blockDataWriter ?? throw new InvalidOperationException("RCON 未启用，无法使用方块数据写入功能");
     public IGameUtilities GameUtilities => _gameUtilities ?? throw new InvalidOperationException("RCON 未启用，无法使用游戏实用工具");
     public IMusicPlayer MusicPlayer => _musicPlayer;
+    public IPermissionManager PermissionManager => _permissionManager;
     
     // 待实现的功能
     public IServerQuery ServerQuery => throw new NotImplementedException("服务器查询功能将在后续版本实现（基于 MC 网络协议）");
@@ -110,7 +113,8 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         IBlockDataReader blockDataReader,
         IBlockDataWriter? blockDataWriter,
         IGameUtilities? gameUtilities,
-        IMusicPlayer musicPlayer)
+        IMusicPlayer musicPlayer,
+        IPermissionManager permissionManager)
     {
         _pluginManager = pluginManager;
         _eventBus = eventBus;
@@ -134,6 +138,7 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         _blockDataWriter = blockDataWriter;
         _gameUtilities = gameUtilities;
         _musicPlayer = musicPlayer;
+        _permissionManager = permissionManager;
 
         PluginInfo = container.Metadata.ToPluginInfo();
         DataDirectory = container.DataDirectory;

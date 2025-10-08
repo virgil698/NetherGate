@@ -77,9 +77,17 @@ public class PermissionManager : IPermissionManager
     }
 
     /// <summary>
-    /// 检查权限
+    /// 检查权限（异步）
     /// </summary>
-    public bool HasPermission(string user, string permission)
+    public Task<bool> HasPermissionAsync(string playerName, string permission)
+    {
+        return Task.FromResult(HasPermission(playerName, permission));
+    }
+
+    /// <summary>
+    /// 检查权限（内部同步方法）
+    /// </summary>
+    private bool HasPermission(string user, string permission)
     {
         lock (_lock)
         {
@@ -178,52 +186,54 @@ public class PermissionManager : IPermissionManager
     /// <summary>
     /// 授予用户权限
     /// </summary>
-    public void GrantPermission(string user, string permission)
+    public Task GrantPermissionAsync(string playerName, string permission)
     {
         lock (_lock)
         {
-            if (!_playerPermissions.ContainsKey(user))
+            if (!_playerPermissions.ContainsKey(playerName))
             {
-                _playerPermissions[user] = new HashSet<string>();
+                _playerPermissions[playerName] = new HashSet<string>();
             }
 
-            _playerPermissions[user].Add(permission);
-            _logger.Info($"授予用户 '{user}' 权限: {permission}");
+            _playerPermissions[playerName].Add(permission);
+            _logger.Info($"授予用户 '{playerName}' 权限: {permission}");
         }
+        return Task.CompletedTask;
     }
 
     /// <summary>
     /// 撤销用户权限
     /// </summary>
-    public void RevokePermission(string user, string permission)
+    public Task RevokePermissionAsync(string playerName, string permission)
     {
         lock (_lock)
         {
-            if (_playerPermissions.TryGetValue(user, out var perms))
+            if (_playerPermissions.TryGetValue(playerName, out var perms))
             {
                 perms.Remove(permission);
-                _logger.Info($"撤销用户 '{user}' 权限: {permission}");
+                _logger.Info($"撤销用户 '{playerName}' 权限: {permission}");
             }
         }
+        return Task.CompletedTask;
     }
 
     /// <summary>
     /// 获取用户权限
     /// </summary>
-    public List<string> GetPermissions(string user)
+    public Task<List<string>> GetUserPermissionsAsync(string playerName)
     {
         lock (_lock)
         {
             var allPermissions = new HashSet<string>();
 
             // 玩家特定权限
-            if (_playerPermissions.TryGetValue(user, out var playerPerms))
+            if (_playerPermissions.TryGetValue(playerName, out var playerPerms))
             {
                 allPermissions.UnionWith(playerPerms);
             }
 
             // 组权限
-            if (_playerGroups.TryGetValue(user, out var groups))
+            if (_playerGroups.TryGetValue(playerName, out var groups))
             {
                 foreach (var groupName in groups)
                 {
@@ -231,7 +241,7 @@ public class PermissionManager : IPermissionManager
                 }
             }
 
-            return allPermissions.ToList();
+            return Task.FromResult(allPermissions.ToList());
         }
     }
 
@@ -259,74 +269,56 @@ public class PermissionManager : IPermissionManager
     /// <summary>
     /// 将用户添加到组
     /// </summary>
-    public void AddUserToGroup(string user, string groupName)
+    public Task AddUserToGroupAsync(string playerName, string groupName)
     {
         lock (_lock)
         {
             if (!_groups.ContainsKey(groupName))
             {
                 _logger.Warning($"权限组不存在: {groupName}");
-                return;
+                return Task.CompletedTask;
             }
 
-            if (!_playerGroups.ContainsKey(user))
+            if (!_playerGroups.ContainsKey(playerName))
             {
-                _playerGroups[user] = new HashSet<string>();
+                _playerGroups[playerName] = new HashSet<string>();
             }
 
-            _playerGroups[user].Add(groupName);
-            _logger.Info($"将用户 '{user}' 添加到组: {groupName}");
+            _playerGroups[playerName].Add(groupName);
+            _logger.Info($"将用户 '{playerName}' 添加到组: {groupName}");
         }
+        return Task.CompletedTask;
     }
 
     /// <summary>
     /// 将用户从组中移除
     /// </summary>
-    public void RemoveUserFromGroup(string user, string groupName)
+    public Task RemoveUserFromGroupAsync(string playerName, string groupName)
     {
         lock (_lock)
         {
-            if (_playerGroups.TryGetValue(user, out var groups))
+            if (_playerGroups.TryGetValue(playerName, out var groups))
             {
                 groups.Remove(groupName);
-                _logger.Info($"将用户 '{user}' 从组移除: {groupName}");
+                _logger.Info($"将用户 '{playerName}' 从组移除: {groupName}");
             }
         }
+        return Task.CompletedTask;
     }
 
     /// <summary>
     /// 获取用户所在的所有组
     /// </summary>
-    public List<string> GetUserGroups(string user)
+    public Task<List<string>> GetUserGroupsAsync(string playerName)
     {
         lock (_lock)
         {
-            if (_playerGroups.TryGetValue(user, out var groups))
+            if (_playerGroups.TryGetValue(playerName, out var groups))
             {
-                return groups.ToList();
+                return Task.FromResult(groups.ToList());
             }
 
-            return new List<string>();
-        }
-    }
-
-    public List<string> GetAllUsers()
-    {
-        lock (_lock)
-        {
-            // 汇总所有出现在玩家-组映射和玩家特定权限中的名字
-            var users = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var u in _playerGroups.Keys) users.Add(u);
-            foreach (var u in _playerPermissions.Keys) users.Add(u);
-            return users.OrderBy(u => u, StringComparer.OrdinalIgnoreCase).ToList();
-        }
-    }
-
-    public List<string> GetAllGroups()
-    {
-        lock (_lock)
-        {
-            return _groups.Keys.OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList();
+            return Task.FromResult(new List<string>());
         }
     }
 
@@ -494,10 +486,112 @@ public class PermissionManager : IPermissionManager
         }
     }
 
-    // 其他接口方法的空实现（如果 IPermissionManager 有其他方法）
-    public void CreateGroup(string groupName) => throw new NotImplementedException();
-    public void DeleteGroup(string groupName) => throw new NotImplementedException();
-    public void GrantGroupPermission(string groupName, string permission) => throw new NotImplementedException();
-    public void RevokeGroupPermission(string groupName, string permission) => throw new NotImplementedException();
-    public List<string> GetGroupPermissions(string groupName) => throw new NotImplementedException();
+    /// <summary>
+    /// 创建权限组
+    /// </summary>
+    public Task CreateGroupAsync(string groupName, int priority = 0)
+    {
+        lock (_lock)
+        {
+            if (_groups.ContainsKey(groupName))
+            {
+                _logger.Warning($"权限组已存在: {groupName}");
+                return Task.CompletedTask;
+            }
+
+            _groups[groupName] = new PermissionGroupInternal
+            {
+                Name = groupName,
+                Priority = priority,
+                Permissions = new HashSet<string>(),
+                InheritFrom = new HashSet<string>(),
+                IsDefault = false
+            };
+
+            _logger.Info($"创建权限组: {groupName} (优先级: {priority})");
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 删除权限组
+    /// </summary>
+    public Task DeleteGroupAsync(string groupName)
+    {
+        lock (_lock)
+        {
+            if (!_groups.ContainsKey(groupName))
+            {
+                _logger.Warning($"权限组不存在: {groupName}");
+                return Task.CompletedTask;
+            }
+
+            _groups.Remove(groupName);
+
+            // 从所有玩家中移除该组
+            foreach (var playerGroups in _playerGroups.Values)
+            {
+                playerGroups.Remove(groupName);
+            }
+
+            _logger.Info($"删除权限组: {groupName}");
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 给予组权限
+    /// </summary>
+    public Task GrantGroupPermissionAsync(string groupName, string permission)
+    {
+        lock (_lock)
+        {
+            if (!_groups.TryGetValue(groupName, out var group))
+            {
+                _logger.Warning($"权限组不存在: {groupName}");
+                return Task.CompletedTask;
+            }
+
+            group.Permissions.Add(permission);
+            _logger.Info($"给予组 '{groupName}' 权限: {permission}");
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 撤销组权限
+    /// </summary>
+    public Task RevokeGroupPermissionAsync(string groupName, string permission)
+    {
+        lock (_lock)
+        {
+            if (!_groups.TryGetValue(groupName, out var group))
+            {
+                _logger.Warning($"权限组不存在: {groupName}");
+                return Task.CompletedTask;
+            }
+
+            group.Permissions.Remove(permission);
+            _logger.Info($"撤销组 '{groupName}' 权限: {permission}");
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 获取组的所有权限
+    /// </summary>
+    public Task<List<string>> GetGroupPermissionsAsync(string groupName)
+    {
+        lock (_lock)
+        {
+            if (_groups.TryGetValue(groupName, out var group))
+            {
+                var allPermissions = new HashSet<string>();
+                CollectGroupPermissions(groupName, allPermissions, new HashSet<string>());
+                return Task.FromResult(allPermissions.ToList());
+            }
+
+            return Task.FromResult(new List<string>());
+        }
+    }
 }

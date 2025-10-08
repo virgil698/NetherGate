@@ -17,6 +17,8 @@ internal class CommandTree
 {
 	public CommandNode Root { get; }
     private readonly Dictionary<string, List<string>> _usageCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (List<string> suggestions, DateTime cachedAt)> _completionCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly TimeSpan _cacheExpiration = TimeSpan.FromSeconds(30);
 
 	public CommandTree(string name, string? description = null, string? permission = null)
 	{
@@ -24,25 +26,40 @@ internal class CommandTree
 	}
 
 	/// <summary>
-	/// 为 Tab 补全提供建议（不含命令名本身），按权限过滤
+	/// 为 Tab 补全提供建议（不含命令名本身），按权限过滤，带缓存
 	/// </summary>
 	public async Task<List<string>> SuggestAsync(ICommandSender sender, string[] args)
 	{
+		// 生成缓存键
+		var cacheKey = $"{sender.Name}:{string.Join(" ", args)}";
+		
+		// 检查缓存
+		if (_completionCache.TryGetValue(cacheKey, out var cached))
+		{
+			if (DateTime.UtcNow - cached.cachedAt < _cacheExpiration)
+			{
+				return cached.suggestions;
+			}
+			// 过期则删除
+			_completionCache.Remove(cacheKey);
+		}
+
 		var (node, matchedCount) = TraverseToDeepestNode(Root, args);
 		var remaining = args.Length - matchedCount;
+
+		List<string> suggestions;
 
 		// 没有更多已匹配的 token，提示子命令
 		if (remaining == 0)
 		{
-			return node.Children
+			suggestions = node.Children
 				.Where(kv => HasPermission(sender, kv.Value))
 				.Select(kv => kv.Key)
 				.OrderBy(x => x)
 				.ToList();
 		}
-
 		// 存在一个部分 token，尝试以前缀匹配子命令
-		if (remaining == 1)
+		else if (remaining == 1)
 		{
 			var prefix = args[^1];
 			var subMatches = node.Children
@@ -52,27 +69,68 @@ internal class CommandTree
 
 			if (subMatches.Count > 0)
 			{
-				return subMatches.OrderBy(x => x).ToList();
+				suggestions = subMatches.OrderBy(x => x).ToList();
+			}
+			else
+			{
+				// 处理参数级提示
+				var targetArgIndex = remaining - 1;
+				if (targetArgIndex < 0) targetArgIndex = 0;
+
+				if (node.ArgumentProviders.TryGetValue(targetArgIndex, out var provider))
+				{
+					var providerSuggestions = await provider(sender, args.Skip(matchedCount).ToArray());
+					var lastToken = args[^1];
+					suggestions = providerSuggestions
+						.Where(s => string.IsNullOrEmpty(lastToken) || s.StartsWith(lastToken, StringComparison.OrdinalIgnoreCase))
+						.Distinct()
+						.OrderBy(x => x)
+						.ToList();
+				}
+				else
+				{
+					suggestions = new List<string>();
+				}
+			}
+		}
+		else
+		{
+			// 处理参数级提示
+			var targetArgIndex = remaining - 1;
+			if (targetArgIndex < 0) targetArgIndex = 0;
+
+			if (node.ArgumentProviders.TryGetValue(targetArgIndex, out var provider))
+			{
+				var providerSuggestions = await provider(sender, args.Skip(matchedCount).ToArray());
+				var lastToken = args[^1];
+				suggestions = providerSuggestions
+					.Where(s => string.IsNullOrEmpty(lastToken) || s.StartsWith(lastToken, StringComparison.OrdinalIgnoreCase))
+					.Distinct()
+					.OrderBy(x => x)
+					.ToList();
+			}
+			else
+			{
+				suggestions = new List<string>();
 			}
 		}
 
-		// 处理参数级提示
-		var targetArgIndex = remaining - 1; // 当前正在输入的参数索引（基于剩余）
-		if (targetArgIndex < 0) targetArgIndex = 0;
-
-		// 定位到存在参数定义的节点
-		if (node.ArgumentProviders.TryGetValue(targetArgIndex, out var provider))
+		// 缓存结果（限制缓存大小）
+		if (_completionCache.Count > 1000)
 		{
-			var suggestions = await provider(sender, args.Skip(matchedCount).ToArray());
-			var lastToken = args[^1];
-			return suggestions
-				.Where(s => string.IsNullOrEmpty(lastToken) || s.StartsWith(lastToken, StringComparison.OrdinalIgnoreCase))
-				.Distinct()
-				.OrderBy(x => x)
+			// 清理过期缓存
+			var expired = _completionCache
+				.Where(kv => DateTime.UtcNow - kv.Value.cachedAt >= _cacheExpiration)
+				.Select(kv => kv.Key)
 				.ToList();
+			foreach (var key in expired)
+			{
+				_completionCache.Remove(key);
+			}
 		}
 
-		return new List<string>();
+		_completionCache[cacheKey] = (suggestions, DateTime.UtcNow);
+		return suggestions;
 	}
 
 	/// <summary>
@@ -136,6 +194,110 @@ internal class CommandTree
         return usages;
     }
 
+    /// <summary>
+    /// 生成格式化的帮助信息（包含描述和示例）
+    /// </summary>
+    public string GenerateFormattedHelp(string rootCommandName, bool useColors = true)
+    {
+        var help = new System.Text.StringBuilder();
+        
+        // 标题
+        var titleColor = useColors ? "§6" : "";
+        var resetColor = useColors ? "§f" : "";
+        var descColor = useColors ? "§7" : "";
+        var exampleColor = useColors ? "§a" : "";
+        var argColor = useColors ? "§e" : "";
+        
+        help.AppendLine($"{titleColor}=== {rootCommandName} 命令帮助 ==={resetColor}");
+        
+        if (!string.IsNullOrEmpty(Root.Description))
+        {
+            help.AppendLine($"{descColor}{Root.Description}{resetColor}");
+        }
+        
+        help.AppendLine();
+        help.AppendLine($"{titleColor}用法:{resetColor}");
+        
+        // 生成所有用法
+        if (Root.Children.Count > 0)
+        {
+            foreach (var (name, child) in Root.Children.OrderBy(kv => kv.Key))
+            {
+                var argText = CommandNode.FormatArgs(child.ArgSpecs);
+                var usage = string.IsNullOrEmpty(argText)
+                    ? $"  {argColor}{rootCommandName} {name}{resetColor}"
+                    : $"  {argColor}{rootCommandName} {name} {argText}{resetColor}";
+                
+                help.Append(usage);
+                
+                if (!string.IsNullOrEmpty(child.Description))
+                {
+                    help.Append($" {descColor}- {child.Description}{resetColor}");
+                }
+                help.AppendLine();
+                
+                // 显示参数说明
+                if (child.ArgSpecs.Count > 0)
+                {
+                    foreach (var spec in child.ArgSpecs)
+                    {
+                        if (!string.IsNullOrEmpty(spec.Description))
+                        {
+                            help.AppendLine($"      {descColor}{spec.Name}: {spec.Description}{resetColor}");
+                        }
+                    }
+                }
+            }
+        }
+        else if (Root.ArgSpecs.Count > 0)
+        {
+            var argText = CommandNode.FormatArgs(Root.ArgSpecs);
+            help.AppendLine($"  {argColor}{rootCommandName} {argText}{resetColor}");
+            
+            // 显示参数说明
+            foreach (var spec in Root.ArgSpecs)
+            {
+                if (!string.IsNullOrEmpty(spec.Description))
+                {
+                    help.AppendLine($"    {descColor}{spec.Name}: {spec.Description}{resetColor}");
+                }
+            }
+        }
+        
+        // 显示示例
+        if (Root.Examples != null && Root.Examples.Count > 0)
+        {
+            help.AppendLine();
+            help.AppendLine($"{titleColor}示例:{resetColor}");
+            foreach (var example in Root.Examples)
+            {
+                help.AppendLine($"  {exampleColor}{example}{resetColor}");
+            }
+        }
+        
+        return help.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// 生成简洁的命令提示（单行）
+    /// </summary>
+    public string GenerateQuickHelp(string rootCommandName)
+    {
+        var usages = GenerateUsageLines(rootCommandName);
+        if (usages.Count == 0) return $"用法: {rootCommandName}";
+        if (usages.Count == 1) return $"用法: {usages[0]}";
+        return $"用法: {usages[0]} (还有 {usages.Count - 1} 种用法，使用 'help {rootCommandName}' 查看详细信息)";
+    }
+
+    /// <summary>
+    /// 清除缓存
+    /// </summary>
+    public void ClearCache()
+    {
+        _usageCache.Clear();
+        _completionCache.Clear();
+    }
+
 	private static (CommandNode node, int matchedCount) TraverseToDeepestNode(CommandNode start, string[] args)
 	{
 		var node = start;
@@ -167,6 +329,7 @@ internal class CommandNode
 	public string Name { get; }
 	public string? Description { get; }
 	public string? Permission { get; }
+	public List<string>? Examples { get; set; }
 
 	public Dictionary<string, CommandNode> Children { get; } = new();
 	public Dictionary<int, Func<ICommandSender, string[], Task<IEnumerable<string>>>> ArgumentProviders { get; } = new();
@@ -205,6 +368,12 @@ internal class CommandNode
         return this;
     }
 
+    public CommandNode WithExamples(params string[] examples)
+    {
+        Examples = examples.ToList();
+        return this;
+    }
+
     public static string FormatArgs(IReadOnlyList<CommandArgSpec> specs)
     {
         if (specs.Count == 0) return string.Empty;
@@ -226,7 +395,15 @@ internal enum CommandArgType
     Integer,
     Float,
     Boolean,
-    Enum
+    Enum,
+    Uuid,           // UUID 参数
+    TimeSpan,       // 时间间隔（如 "1h30m", "5d", "30s"）
+    FilePath,       // 文件路径
+    Regex,          // 正则表达式
+    JsonObject,     // JSON 对象
+    Url,            // URL 地址
+    IpAddress,      // IP 地址
+    Long            // 长整型
 }
 
 internal sealed class CommandArgSpec

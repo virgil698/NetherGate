@@ -2,107 +2,109 @@ namespace NetherGate.API.Permissions;
 
 /// <summary>
 /// 权限管理器接口
+/// NetherGate 核心只提供此接口，具体实现由权限管理插件提供
 /// </summary>
 public interface IPermissionManager
 {
+    // ========== 权限检查（核心功能）==========
+    
     /// <summary>
-    /// 检查用户是否有权限
+    /// 检查玩家是否拥有权限
     /// </summary>
-    /// <param name="user">用户名</param>
+    /// <param name="playerName">玩家名</param>
     /// <param name="permission">权限节点</param>
-    bool HasPermission(string user, string permission);
-
+    /// <returns>是否拥有权限</returns>
+    Task<bool> HasPermissionAsync(string playerName, string permission);
+    
     /// <summary>
-    /// 授予用户权限
+    /// 获取玩家的所有权限
     /// </summary>
-    /// <param name="user">用户名</param>
+    /// <param name="playerName">玩家名</param>
+    /// <returns>权限列表</returns>
+    Task<List<string>> GetUserPermissionsAsync(string playerName);
+    
+    // ========== 用户组管理（由权限插件实现）==========
+    
+    /// <summary>
+    /// 将玩家添加到组
+    /// </summary>
+    /// <param name="playerName">玩家名</param>
+    /// <param name="groupName">组名</param>
+    Task AddUserToGroupAsync(string playerName, string groupName);
+    
+    /// <summary>
+    /// 从组移除玩家
+    /// </summary>
+    /// <param name="playerName">玩家名</param>
+    /// <param name="groupName">组名</param>
+    Task RemoveUserFromGroupAsync(string playerName, string groupName);
+    
+    /// <summary>
+    /// 获取玩家所在的组
+    /// </summary>
+    /// <param name="playerName">玩家名</param>
+    /// <returns>组名列表</returns>
+    Task<List<string>> GetUserGroupsAsync(string playerName);
+    
+    // ========== 权限管理（由权限插件实现）==========
+    
+    /// <summary>
+    /// 给予玩家权限
+    /// </summary>
+    /// <param name="playerName">玩家名</param>
     /// <param name="permission">权限节点</param>
-    void GrantPermission(string user, string permission);
-
+    Task GrantPermissionAsync(string playerName, string permission);
+    
     /// <summary>
-    /// 撤销用户权限
+    /// 移除玩家权限
     /// </summary>
-    /// <param name="user">用户名</param>
+    /// <param name="playerName">玩家名</param>
     /// <param name="permission">权限节点</param>
-    void RevokePermission(string user, string permission);
-
-    /// <summary>
-    /// 获取用户的所有权限
-    /// </summary>
-    /// <param name="user">用户名</param>
-    List<string> GetPermissions(string user);
-
+    Task RevokePermissionAsync(string playerName, string permission);
+    
     /// <summary>
     /// 创建权限组
     /// </summary>
     /// <param name="groupName">组名</param>
-    void CreateGroup(string groupName);
-
+    /// <param name="priority">优先级</param>
+    Task CreateGroupAsync(string groupName, int priority = 0);
+    
     /// <summary>
     /// 删除权限组
     /// </summary>
     /// <param name="groupName">组名</param>
-    void DeleteGroup(string groupName);
-
+    Task DeleteGroupAsync(string groupName);
+    
     /// <summary>
-    /// 将用户添加到权限组
-    /// </summary>
-    /// <param name="user">用户名</param>
-    /// <param name="groupName">组名</param>
-    void AddUserToGroup(string user, string groupName);
-
-    /// <summary>
-    /// 将用户从权限组移除
-    /// </summary>
-    /// <param name="user">用户名</param>
-    /// <param name="groupName">组名</param>
-    void RemoveUserFromGroup(string user, string groupName);
-
-    /// <summary>
-    /// 授予权限组权限
+    /// 给予组权限
     /// </summary>
     /// <param name="groupName">组名</param>
     /// <param name="permission">权限节点</param>
-    void GrantGroupPermission(string groupName, string permission);
-
+    Task GrantGroupPermissionAsync(string groupName, string permission);
+    
     /// <summary>
-    /// 撤销权限组权限
+    /// 移除组权限
     /// </summary>
     /// <param name="groupName">组名</param>
     /// <param name="permission">权限节点</param>
-    void RevokeGroupPermission(string groupName, string permission);
-
+    Task RevokeGroupPermissionAsync(string groupName, string permission);
+    
     /// <summary>
-    /// 获取用户所在的所有组
-    /// </summary>
-    /// <param name="user">用户名</param>
-    List<string> GetUserGroups(string user);
-
-    /// <summary>
-    /// 获取权限组的所有权限
+    /// 获取组的所有权限
     /// </summary>
     /// <param name="groupName">组名</param>
-    List<string> GetGroupPermissions(string groupName);
-
-    /// <summary>
-    /// 获取所有已记录的用户（含配置中出现过的用户）
-    /// </summary>
-    List<string> GetAllUsers();
-
-    /// <summary>
-    /// 获取所有权限组名称
-    /// </summary>
-    List<string> GetAllGroups();
-
-    /// <summary>
-    /// 保存权限配置
-    /// </summary>
-    Task SaveAsync();
-
+    /// <returns>权限列表</returns>
+    Task<List<string>> GetGroupPermissionsAsync(string groupName);
+    
     /// <summary>
     /// 重新加载权限配置
     /// </summary>
     Task ReloadAsync();
+    
+    /// <summary>
+    /// 保存权限配置
+    /// </summary>
+    Task SaveAsync();
 }
 
 /// <summary>

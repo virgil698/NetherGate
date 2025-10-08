@@ -7,6 +7,7 @@ using NetherGate.API.Logging;
 using NetherGate.API.Localization;
 using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
+using NetherGate.API.Permissions;
 using NetherGate.API.Protocol;
 using NetherGate.API.Scheduling;
 using NetherGate.API.Utilities;
@@ -198,6 +199,13 @@ public interface IPluginContext
     /// 使用 Minecraft 音符盒音效播放音乐
     /// </summary>
     IMusicPlayer MusicPlayer { get; }
+
+    /// <summary>
+    /// 权限管理器
+    /// 用于检查和管理玩家权限
+    /// 注意：NetherGate 核心只提供 API 接口，具体实现由权限管理插件提供
+    /// </summary>
+    IPermissionManager PermissionManager { get; }
 
     /// <summary>
     /// 获取其他插件

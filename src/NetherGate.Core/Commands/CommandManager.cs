@@ -13,12 +13,39 @@ public class CommandManager : ICommandManager
     private readonly IPermissionManager? _permissionManager;
     private readonly Dictionary<string, ICommand> _commands = new();
     private readonly Dictionary<string, string> _aliases = new(); // alias -> commandName
+    private readonly List<ICommandInterceptor> _interceptors = new();
     private readonly object _lock = new();
 
     public CommandManager(ILogger logger, IPermissionManager? permissionManager = null)
     {
         _logger = logger;
         _permissionManager = permissionManager;
+    }
+
+    /// <summary>
+    /// 注册命令拦截器
+    /// </summary>
+    public void RegisterInterceptor(ICommandInterceptor interceptor)
+    {
+        lock (_lock)
+        {
+            _interceptors.Add(interceptor);
+            // 按优先级排序（优先级数值越小越先执行）
+            _interceptors.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+            _logger.Debug($"注册命令拦截器: {interceptor.GetType().Name} (优先级: {interceptor.Priority})");
+        }
+    }
+
+    /// <summary>
+    /// 注销命令拦截器
+    /// </summary>
+    public void UnregisterInterceptor(ICommandInterceptor interceptor)
+    {
+        lock (_lock)
+        {
+            _interceptors.Remove(interceptor);
+            _logger.Debug($"注销命令拦截器: {interceptor.GetType().Name}");
+        }
     }
 
     /// <summary>
@@ -131,6 +158,13 @@ public class CommandManager : ICommandManager
             return CommandResult.Fail("游戏原生命令请直接在游戏内执行，NetherGate 命令请使用 # 前缀");
         }
 
+        // 检查是否为管道命令（包含 | 符号）
+        if (commandLine.Contains('|'))
+        {
+            var pipeline = CommandPipeline.Parse(commandLine, this, _logger);
+            return await pipeline.ExecuteAsync(sender ?? new ConsoleSender(_permissionManager));
+        }
+
         // 解析命令行
         var parts = ParseCommandLine(commandLine);
         if (parts.Length == 0)
@@ -235,77 +269,248 @@ public class CommandManager : ICommandManager
                 var tok = argTokens[i];
                 var spec = node.ArgSpecs[i];
 
-                switch (spec.Type)
+                try
                 {
-                    case CommandArgType.Integer:
-                        if (!int.TryParse(tok, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var intVal))
-                        {
-                            return CommandResult.Fail($"参数 {i + 1} 应为整数: '{tok}'");
-                        }
-                        parsedArgs.Add(intVal);
-                        namedArgs[spec.Name] = intVal;
-                        break;
-                    case CommandArgType.Float:
-                        if (!double.TryParse(tok, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var dblVal))
-                        {
-                            return CommandResult.Fail($"参数 {i + 1} 应为数字: '{tok}'");
-                        }
-                        parsedArgs.Add(dblVal);
-                        namedArgs[spec.Name] = dblVal;
-                        break;
-                    case CommandArgType.Boolean:
+                    var (parsedValue, error) = ParseArgumentValue(tok, spec, i + 1);
+                    if (error != null)
                     {
-                        var t = tok.ToLowerInvariant();
-                        var ok = t is "true" or "false" or "on" or "off" or "yes" or "no" or "1" or "0";
-                        if (!ok)
-                        {
-                            return CommandResult.Fail($"参数 {i + 1} 应为布尔值(true/false/on/off/yes/no/1/0): '{tok}'");
-                        }
-                        var boolVal = t is "true" or "on" or "yes" or "1";
-                        parsedArgs.Add(boolVal);
-                        namedArgs[spec.Name] = boolVal;
-                        break;
+                        return CommandResult.Fail(error);
                     }
-                    case CommandArgType.Enum:
-                        if (spec.EnumValues is { Count: > 0 })
-                        {
-                            var match = spec.EnumValues.FirstOrDefault(v => v.Equals(tok, StringComparison.OrdinalIgnoreCase));
-                            var ok = match != null;
-                            if (!ok)
-                            {
-                                return CommandResult.Fail($"参数 {i + 1} 可选值: {string.Join(", ", spec.EnumValues)} (收到: '{tok}')");
-                            }
-                            parsedArgs.Add(match);
-                            namedArgs[spec.Name] = match;
-                        }
-                        break;
-                    case CommandArgType.String:
-                    default:
-                        parsedArgs.Add(tok);
-                        namedArgs[spec.Name] = tok;
-                        break;
+                    parsedArgs.Add(parsedValue);
+                    namedArgs[spec.Name] = parsedValue;
+                }
+                catch (Exception ex)
+                {
+                    return CommandResult.Fail($"参数 {i + 1} 解析失败: {ex.Message}");
                 }
             }
         }
 
-        // 执行命令
+        // 执行命令（带拦截器）
+        return await ExecuteCommandWithInterceptorsAsync(command, sender, args, parsedArgs, namedArgs);
+    }
+
+    /// <summary>
+    /// 执行命令（带拦截器支持）
+    /// </summary>
+    private async Task<CommandResult> ExecuteCommandWithInterceptorsAsync(
+        ICommand command, 
+        ICommandSender sender, 
+        string[] args,
+        List<object?>? parsedArgs = null,
+        Dictionary<string, object?>? namedArgs = null)
+    {
+        var context = new Dictionary<string, object>();
+        List<ICommandInterceptor> interceptors;
+
+        lock (_lock)
+        {
+            interceptors = _interceptors.ToList();
+        }
+
         try
         {
-            _logger.Debug($"执行命令: {commandName} {string.Join(" ", args)} (by {sender.Name})");
+            // 执行 BeforeExecute 拦截器
+            foreach (var interceptor in interceptors)
+            {
+                var shouldContinue = await interceptor.BeforeExecuteAsync(command, sender, args, context);
+                if (!shouldContinue)
+                {
+                    _logger.Debug($"命令执行被拦截器 {interceptor.GetType().Name} 阻止");
+                    return CommandResult.Fail("命令执行被拦截器阻止");
+                }
+            }
+
+            // 执行命令
+            _logger.Debug($"执行命令: {command.Name} {string.Join(" ", args)} (by {sender.Name})");
+            CommandResult result;
+
             if (parsedArgs != null && namedArgs != null && command is IParsedCommand parsed)
             {
-                return await parsed.ExecuteParsedAsync(sender, parsedArgs, namedArgs);
+                result = await parsed.ExecuteParsedAsync(sender, parsedArgs, namedArgs);
             }
             else
             {
-                return await command.ExecuteAsync(sender, args);
+                result = await command.ExecuteAsync(sender, args);
             }
+
+            // 执行 AfterExecute 拦截器（逆序执行）
+            for (int i = interceptors.Count - 1; i >= 0; i--)
+            {
+                result = await interceptors[i].AfterExecuteAsync(command, sender, args, result, context);
+            }
+
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.Error($"命令执行失败: {commandName}", ex);
+            _logger.Error($"命令执行失败: {command.Name}", ex);
+
+            // 执行异常拦截器
+            foreach (var interceptor in interceptors)
+            {
+                try
+                {
+                    await interceptor.OnExceptionAsync(command, sender, args, ex, context);
+                }
+                catch (Exception interceptorEx)
+                {
+                    _logger.Error($"拦截器 {interceptor.GetType().Name} 处理异常时出错", interceptorEx);
+                }
+            }
+
             return CommandResult.Fail($"命令执行失败: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 解析参数值
+    /// </summary>
+    private static (object? value, string? error) ParseArgumentValue(string token, CommandArgSpec spec, int argIndex)
+    {
+        switch (spec.Type)
+        {
+            case CommandArgType.Integer:
+                if (!int.TryParse(token, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var intVal))
+                {
+                    return (null, $"参数 {argIndex} 应为整数: '{token}'");
+                }
+                return (intVal, null);
+
+            case CommandArgType.Long:
+                if (!long.TryParse(token, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var longVal))
+                {
+                    return (null, $"参数 {argIndex} 应为长整数: '{token}'");
+                }
+                return (longVal, null);
+
+            case CommandArgType.Float:
+                if (!double.TryParse(token, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var dblVal))
+                {
+                    return (null, $"参数 {argIndex} 应为数字: '{token}'");
+                }
+                return (dblVal, null);
+
+            case CommandArgType.Boolean:
+            {
+                var t = token.ToLowerInvariant();
+                var ok = t is "true" or "false" or "on" or "off" or "yes" or "no" or "1" or "0";
+                if (!ok)
+                {
+                    return (null, $"参数 {argIndex} 应为布尔值(true/false/on/off/yes/no/1/0): '{token}'");
+                }
+                var boolVal = t is "true" or "on" or "yes" or "1";
+                return (boolVal, null);
+            }
+
+            case CommandArgType.Enum:
+                if (spec.EnumValues is { Count: > 0 })
+                {
+                    var match = spec.EnumValues.FirstOrDefault(v => v.Equals(token, StringComparison.OrdinalIgnoreCase));
+                    if (match == null)
+                    {
+                        return (null, $"参数 {argIndex} 可选值: {string.Join(", ", spec.EnumValues)} (收到: '{token}')");
+                    }
+                    return (match, null);
+                }
+                return (token, null);
+
+            case CommandArgType.Uuid:
+                if (!Guid.TryParse(token, out var guidVal))
+                {
+                    return (null, $"参数 {argIndex} 应为有效的 UUID: '{token}'");
+                }
+                return (guidVal, null);
+
+            case CommandArgType.TimeSpan:
+            {
+                var timeSpan = ParseTimeSpanString(token);
+                if (timeSpan == null)
+                {
+                    return (null, $"参数 {argIndex} 应为有效的时间间隔 (如 '1h30m', '5d', '30s'): '{token}'");
+                }
+                return (timeSpan.Value, null);
+            }
+
+            case CommandArgType.FilePath:
+                // 简单验证路径格式
+                if (string.IsNullOrWhiteSpace(token) || token.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+                {
+                    return (null, $"参数 {argIndex} 应为有效的文件路径: '{token}'");
+                }
+                return (token, null);
+
+            case CommandArgType.Regex:
+                try
+                {
+                    var regex = new System.Text.RegularExpressions.Regex(token);
+                    return (regex, null);
+                }
+                catch (ArgumentException ex)
+                {
+                    return (null, $"参数 {argIndex} 应为有效的正则表达式: {ex.Message}");
+                }
+
+            case CommandArgType.JsonObject:
+                try
+                {
+                    var json = Newtonsoft.Json.Linq.JToken.Parse(token);
+                    return (json, null);
+                }
+                catch (Newtonsoft.Json.JsonException ex)
+                {
+                    return (null, $"参数 {argIndex} 应为有效的 JSON: {ex.Message}");
+                }
+
+            case CommandArgType.Url:
+                if (!Uri.TryCreate(token, UriKind.Absolute, out var uri))
+                {
+                    return (null, $"参数 {argIndex} 应为有效的 URL: '{token}'");
+                }
+                return (uri, null);
+
+            case CommandArgType.IpAddress:
+                if (!System.Net.IPAddress.TryParse(token, out var ipAddress))
+                {
+                    return (null, $"参数 {argIndex} 应为有效的 IP 地址: '{token}'");
+                }
+                return (ipAddress, null);
+
+            case CommandArgType.String:
+            default:
+                return (token, null);
+        }
+    }
+
+    /// <summary>
+    /// 解析时间间隔字符串（如 "1h30m", "5d", "30s"）
+    /// </summary>
+    private static TimeSpan? ParseTimeSpanString(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+
+        var regex = new System.Text.RegularExpressions.Regex(@"(\d+)([dhms])");
+        var matches = regex.Matches(input.ToLower());
+        
+        if (matches.Count == 0) return null;
+
+        var totalSeconds = 0.0;
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            if (!double.TryParse(match.Groups[1].Value, out var value)) continue;
+            
+            var unit = match.Groups[2].Value;
+            totalSeconds += unit switch
+            {
+                "d" => value * 86400,   // days
+                "h" => value * 3600,    // hours
+                "m" => value * 60,      // minutes
+                "s" => value,           // seconds
+                _ => 0
+            };
+        }
+
+        return totalSeconds > 0 ? TimeSpan.FromSeconds(totalSeconds) : null;
     }
 
     /// <summary>
@@ -525,7 +730,7 @@ public class ConsoleSender : ICommandSender
         // 控制台拥有所有权限
         if (_permissionManager != null)
         {
-            return _permissionManager.HasPermission("Console", permission);
+            return _permissionManager.HasPermissionAsync("Console", permission).GetAwaiter().GetResult();
         }
         return true;
     }
