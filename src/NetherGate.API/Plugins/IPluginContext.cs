@@ -1,3 +1,4 @@
+using NetherGate.API.Audio;
 using NetherGate.API.Data;
 using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
@@ -8,6 +9,7 @@ using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
 using NetherGate.API.Protocol;
 using NetherGate.API.Scheduling;
+using NetherGate.API.Utilities;
 
 namespace NetherGate.API.Plugins;
 
@@ -170,6 +172,32 @@ public interface IPluginContext
     /// 用于监听 Minecraft 服务器的网络层事件
     /// </summary>
     INetworkEventListener NetworkEventListener { get; }
+
+    /// <summary>
+    /// 方块数据读取器
+    /// 用于读取容器（箱子、漏斗等）和方块实体的数据
+    /// </summary>
+    IBlockDataReader BlockDataReader { get; }
+
+    /// <summary>
+    /// 方块数据写入器
+    /// 用于修改容器（箱子、漏斗等）和方块实体的数据
+    /// ⚠️ 需要 RCON 支持
+    /// </summary>
+    IBlockDataWriter BlockDataWriter { get; }
+
+    /// <summary>
+    /// 游戏实用工具
+    /// 提供高层便捷的游戏操作 API（烟花、声音、粒子、区域操作等）
+    /// ⚠️ 需要 RCON 支持
+    /// </summary>
+    IGameUtilities GameUtilities { get; }
+
+    /// <summary>
+    /// 音乐播放器
+    /// 使用 Minecraft 音符盒音效播放音乐
+    /// </summary>
+    IMusicPlayer MusicPlayer { get; }
 
     /// <summary>
     /// 获取其他插件
@@ -359,7 +387,14 @@ public record CommandResult
     /// </summary>
     public string? Error { get; init; }
 
+    /// <summary>
+    /// 创建成功结果
+    /// </summary>
     public static CommandResult Ok(string message = "") => new() { Success = true, Message = message };
+    
+    /// <summary>
+    /// 创建失败结果
+    /// </summary>
     public static CommandResult Fail(string error) => new() { Success = false, Error = error };
 }
 

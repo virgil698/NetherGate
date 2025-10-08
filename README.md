@@ -9,6 +9,8 @@
 [![License](https://img.shields.io/badge/License-LGPL--3.0-blue.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/Coverage-100%25-success)](docs/功能覆盖率报告.md)
 
+简体中文 | [English](README_EN.md)
+
 </div>
 
 ---
@@ -35,8 +37,11 @@ NetherGate 让插件开发变得**简单而强大**：
 | **网络事件** | ✅ 100% | 4 种监听模式（LogBased 立即可用） |
 | **NBT 数据** | ✅ 100% | 读取 + 写入（玩家/世界数据） |
 | **数据组件** | ✅ 100% | 1.20.5+ 物品组件系统支持 |
+| **方块数据** | ✅ 100% | 箱子/漏斗/告示牌等容器读写 |
 | **文件操作** | ✅ 100% | 读写/监听/备份 |
 | **性能监控** | ✅ 100% | CPU/内存/TPS |
+| **游戏实用工具** | ✅ 100% | 烟花/音乐/时间/区域操作 |
+| **扩展方法库** | ✅ 100% | 物品堆/位置扩展方法 |
 
 **详细报告：** [功能覆盖率文档](docs/功能覆盖率报告.md)
 
@@ -154,16 +159,47 @@ server_process:
 
 ### **1. 安装 NuGet 包**
 
-NetherGate.API 已发布到 NuGet.org，可以直接安装：
+NetherGate.API 发布在 GitHub Packages，安装前需要配置 NuGet 源：
+
+**方式一：使用项目配置文件（推荐）**
+
+在项目根目录创建 `nuget.config`：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="github" value="https://nuget.pkg.github.com/virgil698/index.json" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+</configuration>
+```
+
+然后进行身份验证并安装：
+
+```bash
+# 配置 GitHub Packages 认证（使用 GitHub Personal Access Token）
+dotnet nuget add source --username YOUR_GITHUB_USERNAME --password YOUR_GITHUB_TOKEN --store-password-in-clear-text --name github "https://nuget.pkg.github.com/virgil698/index.json"
+
+# 创建插件项目
+dotnet new classlib -n MyPlugin
+cd MyPlugin
+
+# 安装 NetherGate.API
+dotnet add package NetherGate.API
+```
+
+**方式二：直接安装**
 
 ```bash
 dotnet new classlib -n MyPlugin
 cd MyPlugin
-dotnet add package NetherGate.API
+dotnet add package NetherGate.API --source https://nuget.pkg.github.com/virgil698/index.json
 ```
 
-[![NuGet](https://img.shields.io/nuget/v/NetherGate.API.svg)](https://www.nuget.org/packages/NetherGate.API/)
-[![NuGet Downloads](https://img.shields.io/nuget/dt/NetherGate.API.svg)](https://www.nuget.org/packages/NetherGate.API/)
+> 💡 **获取 GitHub Token**: 前往 [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens) 创建一个具有 `read:packages` 权限的 token。
+
+[![GitHub Package](https://img.shields.io/badge/GitHub-Package-blue?logo=github)](https://github.com/virgil698/NetherGate/packages)
 
 ### **2. 编写代码**
 
@@ -223,6 +259,19 @@ NetherGate 提供了完整的 API，让你能实现**任何想法**：
 // BossBar、Title、ActionBar、聊天消息
 await context.GameDisplay.ShowBossBarAsync("my_boss", "欢迎！", 1.0f);
 await context.GameDisplay.ShowTitleAsync("@a", "§6标题", "§e副标题");
+
+// 烟花系统 - 快速释放绚丽烟花
+await context.GameUtilities.LaunchFireworkAsync(
+    position, FireworkType.LargeBall, 
+    colors: new[] { FireworkColor.Red, FireworkColor.Gold }
+);
+
+// 音乐播放器 - 在游戏中播放音符
+await context.MusicPlayer.CreateMelody()
+    .AddNote(Note.C, 200)
+    .AddNote(Note.E, 200)
+    .AddNote(Note.G, 400)
+    .PlayAsync("@a");
 ```
 
 ### **📦 数据操作**
@@ -234,6 +283,11 @@ await context.NbtDataWriter.UpdatePlayerHealthAsync(uuid, 20.0f);
 // 物品组件系统
 var item = await context.ItemComponentReader.ReadInventorySlotAsync(player, slot);
 await context.ItemComponentWriter.UpdateComponentAsync(player, slot, "custom_name", "神剑");
+
+// 箱子操作 - 读取、排序、写入
+var items = await context.BlockDataReader.GetChestItemsAsync(chestPos);
+var sortedItems = items.SortById().FilterEnchanted(); // 使用扩展方法
+await context.BlockDataWriter.SetContainerItemsAsync(chestPos, sortedItems);
 ```
 
 ### **🎯 SMP 协议**
@@ -248,6 +302,14 @@ await context.SmpApi.UpdateGameRuleAsync("doDaylightCycle", "false");
 ```csharp
 // 执行任意 Minecraft 命令
 var result = await context.RconClient.ExecuteCommandAsync("give @a diamond 64");
+
+// 流式命令序列 - 延迟和重复执行
+await context.GameUtilities.CreateSequence()
+    .Execute(() => DoSomething())
+    .WaitTicks(20)  // 等待 1 秒（20 ticks）
+    .Execute(() => DoAnotherThing())
+    .Repeat(3)      // 重复 3 次
+    .RunAsync();
 ```
 
 ### **💬 插件间通信**
@@ -264,6 +326,8 @@ var response = await context.Messenger.SendMessageAsync(
 - 🔒 **权限系统**：组、继承、通配符
 - ⏱️ **性能监控**：CPU、内存、TPS
 - 🎭 **事件系统**：30+ 事件类型，支持优先级
+- 🎨 **扩展方法库**：物品堆排序/筛选、位置计算、统计分析
+- 🎯 **游戏实用工具**：烟花、音乐、时间控制、区域操作
 
 **完整 API 文档：** [API 参考](docs/08-参考/API参考.md)
 
@@ -302,25 +366,6 @@ var response = await context.Messenger.SendMessageAsync(
 
 ---
 
-## 🏗️ **项目架构**
-
-```
-NetherGate/
-├── src/
-│   ├── NetherGate.API/          # 插件 API 接口
-│   ├── NetherGate.Core/         # 核心实现
-│   └── NetherGate.Host/         # 主程序
-├── docs/                        # 完整文档
-├── scripts/                     # 构建脚本
-└── bin/Release/                 # 编译输出
-    ├── NetherGate.Host.exe      # 主程序
-    ├── plugins/                 # 插件目录
-    ├── config/                  # 配置目录
-    └── logs/                    # 日志目录
-```
-
----
-
 ## 🤝 **贡献**
 
 欢迎贡献代码、文档或建议！
@@ -335,7 +380,7 @@ NetherGate/
 
 ## 📄 **许可证**
 
-本项目采用 [MIT License](LICENSE) 开源协议。
+本项目采用 [LGPL-3.0 License](LICENSE) 开源协议。
 
 ---
 
@@ -352,13 +397,18 @@ NetherGate/
 
 ### **特别感谢**
 
-感谢 [**MCDReforged**](https://github.com/Fallen-Breath/MCDReforged) 为 NetherGate 提供了优秀的设计思路和开发理念！MCDReforged 在 Python 生态中为 Minecraft 服务器管理树立了标杆，NetherGate 在继承这些优秀理念的基础上，结合 .NET 的高性能和现代化特性，为插件开发者带来更强大、更灵活的开发体验。
+感谢以下项目为 NetherGate 提供了设计灵感和技术参考：
+
+- [**MCDReforged**](https://github.com/Fallen-Breath/MCDReforged) - 为 NetherGate 提供了优秀的插件系统设计思路和开发理念。MCDReforged 在 Python 生态中为 Minecraft 服务器管理树立了标杆，NetherGate 在继承这些优秀理念的基础上，结合 .NET 的高性能和现代化特性，为插件开发者带来更强大、更灵活的开发体验。
+
+- [**MinecraftConnection**](https://github.com/takunology/MinecraftConnection) - 为 NetherGate 的 RCON 命令封装和游戏操作 API 设计提供了重要参考。该项目展示了如何优雅地封装 Minecraft 命令，NetherGate 在此基础上进一步扩展，实现了烟花系统、音乐播放器、箱子操作等高级功能，为开发者提供更便捷的游戏交互 API。
 
 ### **开源项目**
 
 感谢以下优秀的开源项目：
 
 - [MCDReforged](https://github.com/Fallen-Breath/MCDReforged) - 设计理念和灵感来源
+- [MinecraftConnection](https://github.com/takunology/MinecraftConnection) - RCON 命令封装和游戏操作 API 设计参考
 - [fNbt](https://github.com/mstefarov/fNbt) - NBT 数据处理
 - [YamlDotNet](https://github.com/aaubry/YamlDotNet) - YAML 配置支持
 - [Minecraft Wiki](https://zh.minecraft.wiki) - 技术文档参考

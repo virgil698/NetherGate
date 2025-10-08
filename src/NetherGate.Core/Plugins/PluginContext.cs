@@ -1,3 +1,4 @@
+using NetherGate.API.Audio;
 using NetherGate.API.Data;
 using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
@@ -9,6 +10,7 @@ using NetherGate.API.Network;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
 using NetherGate.API.Scheduling;
+using NetherGate.API.Utilities;
 
 namespace NetherGate.Core.Plugins;
 
@@ -40,6 +42,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly IServerCommandExecutor _commandExecutor;
     private readonly II18nService _i18n;
     private readonly IScheduler _scheduler;
+    private readonly IBlockDataReader _blockDataReader;
+    private readonly IBlockDataWriter? _blockDataWriter;
+    private readonly IGameUtilities? _gameUtilities;
+    private readonly IMusicPlayer _musicPlayer;
 
     public PluginInfo PluginInfo { get; }
     public string DataDirectory { get; }
@@ -67,6 +73,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     public IGameDisplayApi GameDisplay => _gameDisplay;
     public II18nService I18n => _i18n;
     public IScheduler Scheduler => _scheduler;
+    public IBlockDataReader BlockDataReader => _blockDataReader;
+    public IBlockDataWriter BlockDataWriter => _blockDataWriter ?? throw new InvalidOperationException("RCON 未启用，无法使用方块数据写入功能");
+    public IGameUtilities GameUtilities => _gameUtilities ?? throw new InvalidOperationException("RCON 未启用，无法使用游戏实用工具");
+    public IMusicPlayer MusicPlayer => _musicPlayer;
     
     // 待实现的功能
     public IServerQuery ServerQuery => throw new NotImplementedException("服务器查询功能将在后续版本实现（基于 MC 网络协议）");
@@ -96,7 +106,11 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         IItemComponentConverter itemComponentConverter,
         INetworkEventListener networkEventListener,
         IGameDisplayApi gameDisplay,
-        IServerCommandExecutor commandExecutor)
+        IServerCommandExecutor commandExecutor,
+        IBlockDataReader blockDataReader,
+        IBlockDataWriter? blockDataWriter,
+        IGameUtilities? gameUtilities,
+        IMusicPlayer musicPlayer)
     {
         _pluginManager = pluginManager;
         _eventBus = eventBus;
@@ -116,6 +130,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         _networkEventListener = networkEventListener;
         _gameDisplay = gameDisplay;
         _commandExecutor = commandExecutor;
+        _blockDataReader = blockDataReader;
+        _blockDataWriter = blockDataWriter;
+        _gameUtilities = gameUtilities;
+        _musicPlayer = musicPlayer;
 
         PluginInfo = container.Metadata.ToPluginInfo();
         DataDirectory = container.DataDirectory;

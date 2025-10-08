@@ -37,6 +37,12 @@ project.fragment.lock.json
 artifacts/
 nupkg/
 
+# NuGet 配置（包含敏感信息，不提交）
+nuget.config
+NuGet.Config
+# 保留示例配置
+!nuget.config.example
+
 # Test Results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*

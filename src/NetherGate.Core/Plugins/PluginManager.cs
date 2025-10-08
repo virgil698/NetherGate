@@ -1,3 +1,4 @@
+using NetherGate.API.Audio;
 using NetherGate.API.Configuration;
 using NetherGate.API.Data;
 using NetherGate.API.Events;
@@ -8,11 +9,14 @@ using NetherGate.API.Monitoring;
 using NetherGate.API.Network;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
+using NetherGate.API.Utilities;
+using NetherGate.Core.Audio;
 using NetherGate.Core.Data;
 using NetherGate.Core.FileSystem;
 using NetherGate.Core.GameDisplay;
 using NetherGate.Core.Monitoring;
 using NetherGate.Core.Protocol;
+using NetherGate.Core.Utilities;
 
 namespace NetherGate.Core.Plugins;
 
@@ -48,6 +52,12 @@ public class PluginManager
     private IGameDisplayApi? _gameDisplayApi;
     private readonly string _serverDirectory;
     private readonly IServerCommandExecutor? _commandExecutor;
+    
+    // 新增的实用工具服务
+    private IBlockDataReader? _blockDataReader;
+    private IBlockDataWriter? _blockDataWriter;
+    private IGameUtilities? _gameUtilities;
+    private IMusicPlayer? _musicPlayer;
 
     public PluginManager(
         ILoggerFactory loggerFactory,
@@ -148,6 +158,67 @@ public class PluginManager
         
         // 如果 RCON 未启用，返回一个占位实现
         return _gameDisplayApi ?? new GameDisplayApi(null!, _logger);
+    }
+    
+    /// <summary>
+    /// 获取或创建方块数据读取器
+    /// </summary>
+    private IBlockDataReader GetBlockDataReader()
+    {
+        return _blockDataReader ??= new NetherGate.Core.Data.BlockDataReader(
+            _serverDirectory,
+            _logger,
+            (WorldDataReader)GetWorldDataReader()
+        );
+    }
+    
+    /// <summary>
+    /// 获取或创建方块数据写入器
+    /// </summary>
+    private IBlockDataWriter GetBlockDataWriter()
+    {
+        if (_blockDataWriter == null && _rconClient != null)
+        {
+            _blockDataWriter = new NetherGate.Core.Data.BlockDataWriter(
+                _rconClient,
+                GetBlockDataReader(),
+                _logger
+            );
+        }
+        
+        return _blockDataWriter ?? throw new InvalidOperationException("RCON 未启用，无法使用方块数据写入功能");
+    }
+    
+    /// <summary>
+    /// 获取或创建游戏实用工具
+    /// </summary>
+    private IGameUtilities? GetGameUtilities()
+    {
+        if (_gameUtilities == null && _rconClient != null)
+        {
+            _gameUtilities = new GameUtilities(
+                _rconClient!,
+                GetGameDisplayApi(),
+                _logger
+            );
+        }
+        
+        return _gameUtilities;
+    }
+    
+    /// <summary>
+    /// 获取或创建音乐播放器
+    /// </summary>
+    private IMusicPlayer GetMusicPlayer()
+    {
+        if (_musicPlayer == null)
+        {
+            _musicPlayer = new MusicPlayer(
+                GetGameDisplayApi(),
+                _logger
+            );
+        }
+        return _musicPlayer;
     }
     
     /// <summary>
@@ -309,7 +380,11 @@ public class PluginManager
                 GetItemComponentConverter(),
                 GetNetworkEventListener(),
                 GetGameDisplayApi(),
-                _commandExecutor ?? new ServerCommandExecutor(new NetherGate.API.Configuration.NetherGateConfig(), _loggerFactory.CreateLogger("CmdExec"), null, _rconClient, _eventBus)
+                _commandExecutor ?? new ServerCommandExecutor(new NetherGate.API.Configuration.NetherGateConfig(), _loggerFactory.CreateLogger("CmdExec"), null, _rconClient, _eventBus),
+                GetBlockDataReader(),
+                _rconClient != null ? GetBlockDataWriter() : null!,
+                _rconClient != null ? GetGameUtilities() : null!,
+                GetMusicPlayer()
             );
 
             // 通过反射设置 Context 属性（如果存在）
@@ -554,7 +629,11 @@ public class PluginManager
                 GetItemComponentConverter(),
                 GetNetworkEventListener(),
                 GetGameDisplayApi(),
-                _commandExecutor ?? new ServerCommandExecutor(new NetherGate.API.Configuration.NetherGateConfig(), _loggerFactory.CreateLogger("CmdExec"), null, _rconClient, _eventBus)
+                _commandExecutor ?? new ServerCommandExecutor(new NetherGate.API.Configuration.NetherGateConfig(), _loggerFactory.CreateLogger("CmdExec"), null, _rconClient, _eventBus),
+                GetBlockDataReader(),
+                _rconClient != null ? GetBlockDataWriter() : null!,
+                _rconClient != null ? GetGameUtilities() : null!,
+                GetMusicPlayer()
             );
 
             try
