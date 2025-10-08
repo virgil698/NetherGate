@@ -2,8 +2,8 @@ name: Nightly Release
 
 on:
   schedule:
-    # 北京时间每晚 20:00 (UTC 12:00)
-    - cron: '0 12 * * *'
+    # 北京时间每晚 20:10 (UTC 12:10)，避开整点高峰期
+    - cron: '10 12 * * *'
   workflow_dispatch: # 允许手动触发
 
 permissions:
