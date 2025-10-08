@@ -166,7 +166,6 @@ server_process:
 
 ## 🔌 **5 分钟创建第一个插件**
 
-
 ### **1. 安装 NuGet 包**
 
 NetherGate.API 发布在 GitHub Packages，安装前需要配置 NuGet 源：
