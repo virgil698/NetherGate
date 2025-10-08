@@ -42,6 +42,10 @@ NetherGate 让插件开发变得**简单而强大**：
 | **性能监控** | ✅ 100% | CPU/内存/TPS |
 | **游戏实用工具** | ✅ 100% | 烟花/音乐/时间/区域操作 |
 | **扩展方法库** | ✅ 100% | 物品堆/位置扩展方法 |
+| **成就追踪** | ✅ 100% | 实时追踪玩家成就进度 |
+| **统计分析** | ✅ 100% | 游戏统计/方块收集进度 |
+| **排行榜系统** | ✅ 100% | 灵活的排行榜管理 |
+| **数据推送** | ✅ 100% | WebSocket 实时数据广播 |
 
 **详细报告：** [功能覆盖率文档](docs/功能覆盖率报告.md)
 
@@ -197,10 +201,6 @@ cd MyPlugin
 dotnet add package NetherGate.API --source https://nuget.pkg.github.com/virgil698/index.json
 ```
 
-> 💡 **获取 GitHub Token**: 前往 [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens) 创建一个具有 `read:packages` 权限的 token。
-
-[![GitHub Package](https://img.shields.io/badge/GitHub-Package-blue?logo=github)](https://github.com/virgil698/NetherGate/packages)
-
 ### **2. 编写代码**
 
 ```csharp
@@ -274,6 +274,24 @@ await context.MusicPlayer.CreateMelody()
     .PlayAsync("@a");
 ```
 
+### **📊 成就和统计追踪**
+```csharp
+// 实时追踪玩家成就进度（灵感来自 AATool）
+var advancements = await context.AdvancementTracker.GetPlayerAdvancementsAsync(playerUuid);
+context.Logger.Info($"成就完成度: {advancements.ProgressPercentage:F2}%");
+
+// 监听成就完成事件
+context.AdvancementTracker.AdvancementCompleted += async (s, e) => {
+    await context.GameDisplay.SendTitleAsync("@a", 
+        $"§6{e.PlayerName} 完成了 {e.AdvancementName}！"
+    );
+};
+
+// 获取玩家游戏统计
+var stats = await context.StatisticsTracker.GetPlayerStatisticsAsync(playerUuid);
+context.Logger.Info($"游戏时长: {stats.PlayTimeSpan.TotalHours:F1} 小时");
+```
+
 ### **📦 数据操作**
 ```csharp
 // NBT 数据（1.20.4-）、数据组件（1.20.5+）
@@ -312,22 +330,15 @@ await context.GameUtilities.CreateSequence()
     .RunAsync();
 ```
 
-### **💬 插件间通信**
-```csharp
-// 跨插件消息传递（适用于模块化开发）
-var response = await context.Messenger.SendMessageAsync(
-    "EconomyPlugin", "transfer", 
-    new { from = "Player1", to = "Player2", amount = 100 }
-);
-```
-
-### **⚙️ 更多功能**
-- 📁 **文件系统**：读写服务器文件、监听变化
-- 🔒 **权限系统**：组、继承、通配符
-- ⏱️ **性能监控**：CPU、内存、TPS
+### **⚙️ 更多高级功能**
+- 🏆 **排行榜系统**：灵活的排行榜管理、分数更新、排名变化事件
+- 📡 **WebSocket 推送**：实时数据广播到网页/OBS 覆盖层
+- 💬 **插件间通信**：跨插件消息传递，模块化开发
+- 📁 **文件系统**：安全的文件读写、变化监听、自动备份
+- 🔒 **权限系统**：用户组、权限继承、通配符支持
+- ⏱️ **性能监控**：CPU、内存、TPS 实时监控
 - 🎭 **事件系统**：30+ 事件类型，支持优先级
 - 🎨 **扩展方法库**：物品堆排序/筛选、位置计算、统计分析
-- 🎯 **游戏实用工具**：烟花、音乐、时间控制、区域操作
 
 **完整 API 文档：** [API 参考](docs/08-参考/API参考.md)
 
@@ -361,6 +372,9 @@ var response = await context.Messenger.SendMessageAsync(
 - [插件间通信](docs/04-高级功能/插件间通信.md)
 - [文件系统](docs/04-高级功能/文件系统.md)
 - [性能监控](docs/04-高级功能/性能监控.md)
+- [成就和统计追踪](docs/04-高级功能/成就和统计追踪.md) ⭐ 新增
+- [排行榜系统](docs/04-高级功能/排行榜系统.md) ⭐ 新增
+- [WebSocket 数据推送](docs/04-高级功能/WebSocket数据推送.md) ⭐ 新增
 
 **完整文档索引：** [docs/README.md](docs/README.md)
 
@@ -403,12 +417,15 @@ var response = await context.Messenger.SendMessageAsync(
 
 - [**MinecraftConnection**](https://github.com/takunology/MinecraftConnection) - 为 NetherGate 的 RCON 命令封装和游戏操作 API 设计提供了重要参考。该项目展示了如何优雅地封装 Minecraft 命令，NetherGate 在此基础上进一步扩展，实现了烟花系统、音乐播放器、箱子操作等高级功能，为开发者提供更便捷的游戏交互 API。
 
+- [**CTM's AATool**](https://github.com/DarwinBaker/AATool) - 为 NetherGate 的成就追踪和统计分析系统提供了设计灵感。AATool 是一个优秀的 Minecraft 成就追踪工具，展示了如何优雅地读取和追踪玩家数据。NetherGate 借鉴了其文件读取优化技术（安全的文件访问、避免锁定）和实时追踪机制，并结合 .NET 的异步特性，为插件开发者提供了强大的数据追踪和分析能力。
+
 ### **开源项目**
 
 感谢以下优秀的开源项目：
 
 - [MCDReforged](https://github.com/Fallen-Breath/MCDReforged) - 设计理念和灵感来源
 - [MinecraftConnection](https://github.com/takunology/MinecraftConnection) - RCON 命令封装和游戏操作 API 设计参考
+- [CTM's AATool](https://github.com/DarwinBaker/AATool) - 成就追踪系统设计灵感和文件读取优化
 - [fNbt](https://github.com/mstefarov/fNbt) - NBT 数据处理
 - [YamlDotNet](https://github.com/aaubry/YamlDotNet) - YAML 配置支持
 - [Minecraft Wiki](https://zh.minecraft.wiki) - 技术文档参考

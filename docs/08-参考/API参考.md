@@ -6,19 +6,33 @@
 
 ## 📋 **目录**
 
+### 核心 API
 - [IPluginContext](#iplugincontext)
 - [ILogger](#ilogger)
 - [IEventBus](#ieventbus)
 - [ICommandManager](#icommandmanager)
 - [IConfigManager](#iconfigmanager)
 - [IPermissionManager](#ipermissionmanager)
+
+### 游戏交互
 - [IGameDisplayApi](#igamedisplayapi)
 - [IRconClient](#irconclient)
 - [ISmpApi](#ismpapi)
+
+### 数据访问
 - [IPlayerDataReader](#iplayerdatareader)
 - [IWorldDataReader](#iworlddatareader)
 - [INbtDataWriter](#inbtdatawriter)
+
+### 分析和追踪
+- [IAdvancementTracker](#iadvancementtracker)
+- [IStatisticsTracker](#istatisticstracker)
+- [ILeaderboardSystem](#ileaderboardsystem)
+- [IDataBroadcaster](#idatabroadcaster)
+
+### 高级功能
 - [IPluginMessenger](#ipluginmessenger)
+- [SafeFileReader](#safefilereader)
 
 ---
 
@@ -848,6 +862,385 @@ public interface INbtDataWriter
 
 ---
 
+## 📊 **IAdvancementTracker**
+
+成就追踪器接口，用于实时追踪玩家的成就进度。
+
+### **方法**
+
+```csharp
+public interface IAdvancementTracker
+{
+    /// <summary>获取玩家的成就数据</summary>
+    Task<PlayerAdvancementData?> GetPlayerAdvancementsAsync(string playerUuid);
+    
+    /// <summary>获取所有在线玩家的成就数据</summary>
+    Task<Dictionary<string, PlayerAdvancementData>> GetAllPlayerAdvancementsAsync();
+    
+    /// <summary>检查玩家是否完成了指定成就</summary>
+    Task<bool> HasCompletedAdvancementAsync(string playerUuid, string advancementId);
+    
+    /// <summary>获取玩家的成就完成进度（百分比）</summary>
+    Task<double> GetAdvancementProgressAsync(string playerUuid, string? category = null);
+    
+    /// <summary>成就完成事件</summary>
+    event EventHandler<AdvancementCompletedEventArgs>? AdvancementCompleted;
+    
+    /// <summary>启动成就追踪</summary>
+    Task StartTrackingAsync();
+    
+    /// <summary>停止成就追踪</summary>
+    Task StopTrackingAsync();
+}
+```
+
+### **数据模型**
+
+```csharp
+public class PlayerAdvancementData
+{
+    public required string PlayerUuid { get; set; }
+    public string? PlayerName { get; set; }
+    public Dictionary<string, DateTime> CompletedAdvancements { get; set; } = new();
+    public Dictionary<string, Dictionary<string, bool>> InProgressAdvancements { get; set; } = new();
+    public int TotalAdvancements { get; set; }
+    public int CompletedCount => CompletedAdvancements.Count;
+    public double ProgressPercentage => TotalAdvancements > 0 
+        ? (double)CompletedCount / TotalAdvancements * 100 : 0;
+    public DateTime LastUpdated { get; set; }
+}
+
+public class AdvancementCompletedEventArgs : EventArgs
+{
+    public required string PlayerUuid { get; set; }
+    public string? PlayerName { get; set; }
+    public required string AdvancementId { get; set; }
+    public string? AdvancementName { get; set; }
+    public DateTime CompletedAt { get; set; }
+}
+```
+
+### **使用示例**
+
+```csharp
+// 启动追踪
+await context.AdvancementTracker.StartTrackingAsync();
+
+// 获取玩家成就数据
+var advancements = await context.AdvancementTracker.GetPlayerAdvancementsAsync(playerUuid);
+if (advancements != null)
+{
+    context.Logger.Info($"成就完成度: {advancements.ProgressPercentage:F2}%");
+    context.Logger.Info($"已完成: {advancements.CompletedCount}/{advancements.TotalAdvancements}");
+}
+
+// 检查特定成就
+bool hasKilledDragon = await context.AdvancementTracker.HasCompletedAdvancementAsync(
+    playerUuid, "minecraft:end/kill_dragon");
+
+// 获取分类进度
+var netherProgress = await context.AdvancementTracker.GetAdvancementProgressAsync(
+    playerUuid, "nether");
+
+// 监听成就完成事件
+context.AdvancementTracker.AdvancementCompleted += async (s, e) =>
+{
+    await context.GameDisplay.SendTitleAsync("@a", 
+        $"§6{e.PlayerName}", $"§e完成了 {e.AdvancementName}！");
+};
+```
+
+---
+
+## 📈 **IStatisticsTracker**
+
+统计数据追踪器接口，用于追踪玩家的游戏统计数据。
+
+### **方法**
+
+```csharp
+public interface IStatisticsTracker
+{
+    /// <summary>获取玩家的统计数据</summary>
+    Task<PlayerStatistics?> GetPlayerStatisticsAsync(string playerUuid);
+    
+    /// <summary>获取所有在线玩家的统计数据</summary>
+    Task<Dictionary<string, PlayerStatistics>> GetAllPlayerStatisticsAsync();
+    
+    /// <summary>获取指定统计项的值</summary>
+    Task<long> GetStatisticValueAsync(string playerUuid, string statistic);
+    
+    /// <summary>获取玩家的方块收集进度</summary>
+    Task<BlockCollectionProgress> GetBlockProgressAsync(string playerUuid);
+    
+    /// <summary>统计数据更新事件</summary>
+    event EventHandler<StatisticsUpdatedEventArgs>? StatisticsUpdated;
+    
+    /// <summary>启动统计追踪</summary>
+    Task StartTrackingAsync();
+    
+    /// <summary>停止统计追踪</summary>
+    Task StopTrackingAsync();
+}
+```
+
+### **数据模型**
+
+```csharp
+public class PlayerStatistics
+{
+    public required string PlayerUuid { get; set; }
+    public string? PlayerName { get; set; }
+    public long PlayTime { get; set; }
+    public TimeSpan PlayTimeSpan => TimeSpan.FromSeconds(PlayTime / 20.0);
+    public Dictionary<string, long> TravelDistances { get; set; } = new();
+    public Dictionary<string, long> MinedBlocks { get; set; } = new();
+    public Dictionary<string, long> UsedItems { get; set; } = new();
+    public Dictionary<string, long> KilledMobs { get; set; } = new();
+    public Dictionary<string, long> DeathsByMob { get; set; } = new();
+    public Dictionary<string, long> CustomStats { get; set; } = new();
+    public long TotalDeaths => DeathsByMob.Values.Sum();
+    public long TotalKills => KilledMobs.Values.Sum();
+    public DateTime LastUpdated { get; set; }
+}
+
+public class BlockCollectionProgress
+{
+    public required string PlayerUuid { get; set; }
+    public HashSet<string> CollectedBlocks { get; set; } = new();
+    public int TotalBlocks { get; set; }
+    public int CollectedCount => CollectedBlocks.Count;
+    public double ProgressPercentage => TotalBlocks > 0 
+        ? (double)CollectedCount / TotalBlocks * 100 : 0;
+    public HashSet<string> MissingBlocks { get; set; } = new();
+    public DateTime LastUpdated { get; set; }
+}
+```
+
+### **使用示例**
+
+```csharp
+// 启动追踪
+await context.StatisticsTracker.StartTrackingAsync();
+
+// 获取玩家统计
+var stats = await context.StatisticsTracker.GetPlayerStatisticsAsync(playerUuid);
+if (stats != null)
+{
+    context.Logger.Info($"游戏时长: {stats.PlayTimeSpan.TotalHours:F1} 小时");
+    context.Logger.Info($"总击杀数: {stats.TotalKills}");
+    context.Logger.Info($"总死亡数: {stats.TotalDeaths}");
+}
+
+// 方块收集进度
+var blockProgress = await context.StatisticsTracker.GetBlockProgressAsync(playerUuid);
+context.Logger.Info($"方块收集: {blockProgress.ProgressPercentage:F2}%");
+
+// 监听统计更新
+context.StatisticsTracker.StatisticsUpdated += (s, e) =>
+{
+    context.Logger.Info($"{e.PlayerName} 的统计数据已更新");
+};
+```
+
+---
+
+## 🏆 **ILeaderboardSystem**
+
+排行榜系统接口，用于创建和管理排行榜。
+
+### **方法**
+
+```csharp
+public interface ILeaderboardSystem
+{
+    /// <summary>创建新的排行榜</summary>
+    Task<Leaderboard> CreateLeaderboardAsync(string name, LeaderboardType type, 
+        string? displayName = null);
+    
+    /// <summary>删除排行榜</summary>
+    Task<bool> DeleteLeaderboardAsync(string name);
+    
+    /// <summary>获取排行榜</summary>
+    Task<Leaderboard?> GetLeaderboardAsync(string name);
+    
+    /// <summary>获取所有排行榜</summary>
+    Task<List<Leaderboard>> GetAllLeaderboardsAsync();
+    
+    /// <summary>更新玩家分数</summary>
+    Task UpdateScoreAsync(string leaderboardName, string playerUuid, 
+        double score, string? playerName = null);
+    
+    /// <summary>增加玩家分数</summary>
+    Task IncrementScoreAsync(string leaderboardName, string playerUuid, 
+        double increment, string? playerName = null);
+    
+    /// <summary>获取玩家分数</summary>
+    Task<double> GetPlayerScoreAsync(string leaderboardName, string playerUuid);
+    
+    /// <summary>获取玩家排名</summary>
+    Task<int> GetPlayerRankAsync(string leaderboardName, string playerUuid);
+    
+    /// <summary>获取前 N 名玩家</summary>
+    Task<List<LeaderboardEntry>> GetTopPlayersAsync(string leaderboardName, int count = 10);
+    
+    /// <summary>重置排行榜</summary>
+    Task ResetLeaderboardAsync(string leaderboardName);
+    
+    /// <summary>分数更新事件</summary>
+    event EventHandler<ScoreUpdatedEventArgs>? ScoreUpdated;
+    
+    /// <summary>排名变化事件</summary>
+    event EventHandler<RankChangedEventArgs>? RankChanged;
+}
+```
+
+### **排行榜类型**
+
+```csharp
+public enum LeaderboardType
+{
+    HighestScore,   // 最高分（分数越高越好）
+    LowestScore,    // 最低分（分数越低越好，如速通时间）
+    Accumulative    // 累计分数
+}
+```
+
+### **数据模型**
+
+```csharp
+public class Leaderboard
+{
+    public required string Name { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public LeaderboardType Type { get; set; }
+    public List<LeaderboardEntry> Entries { get; set; } = new();
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastUpdated { get; set; }
+}
+
+public class LeaderboardEntry
+{
+    public int Rank { get; set; }
+    public required string PlayerUuid { get; set; }
+    public string? PlayerName { get; set; }
+    public double Score { get; set; }
+    public DateTime LastUpdated { get; set; }
+}
+```
+
+### **使用示例**
+
+```csharp
+// 创建排行榜
+await context.LeaderboardSystem.CreateLeaderboardAsync(
+    "kills", LeaderboardType.HighestScore, "击杀排行");
+
+// 更新分数
+await context.LeaderboardSystem.UpdateScoreAsync("kills", playerUuid, 100, "Player1");
+
+// 增加分数
+await context.LeaderboardSystem.IncrementScoreAsync("kills", playerUuid, 10);
+
+// 获取前 10 名
+var topPlayers = await context.LeaderboardSystem.GetTopPlayersAsync("kills", 10);
+foreach (var entry in topPlayers)
+{
+    context.Logger.Info($"#{entry.Rank} {entry.PlayerName}: {entry.Score}");
+}
+
+// 监听排名变化
+context.LeaderboardSystem.RankChanged += async (s, e) =>
+{
+    await context.GameDisplay.SendActionBarAsync(e.PlayerName, 
+        $"§a排名: #{e.NewRank}");
+};
+```
+
+---
+
+## 📡 **IDataBroadcaster**
+
+WebSocket 数据广播器接口，用于实时推送数据到客户端。
+
+### **方法**
+
+```csharp
+public interface IDataBroadcaster
+{
+    /// <summary>向指定频道广播数据</summary>
+    Task BroadcastAsync<T>(string channel, T data);
+    
+    /// <summary>向特定客户端发送数据</summary>
+    Task SendToClientAsync<T>(string channel, string clientId, T data);
+    
+    /// <summary>注册自动数据源（定时推送）</summary>
+    Task RegisterDataSourceAsync<T>(string channel, Func<Task<T>> dataProvider, 
+        TimeSpan interval);
+    
+    /// <summary>取消注册数据源</summary>
+    Task UnregisterDataSourceAsync(string channel);
+    
+    /// <summary>获取频道的订阅者数量</summary>
+    int GetSubscriberCount(string channel);
+    
+    /// <summary>获取所有活跃频道</summary>
+    List<string> GetActiveChannels();
+    
+    /// <summary>客户端连接事件</summary>
+    event EventHandler<ClientConnectedEventArgs>? ClientConnected;
+    
+    /// <summary>客户端断开事件</summary>
+    event EventHandler<ClientDisconnectedEventArgs>? ClientDisconnected;
+}
+```
+
+### **WebSocket 消息格式**
+
+```csharp
+public class WebSocketMessage<T>
+{
+    public string Type { get; set; } = "data";
+    public required string Channel { get; set; }
+    public T? Data { get; set; }
+    public long Timestamp { get; set; }
+    public string MessageId { get; set; } = Guid.NewGuid().ToString();
+}
+```
+
+### **使用示例**
+
+```csharp
+// 广播数据到频道
+await context.DataBroadcaster.BroadcastAsync("leaderboard", new
+{
+    players = topPlayers,
+    timestamp = DateTime.UtcNow
+});
+
+// 注册自动数据源（每秒推送一次）
+await context.DataBroadcaster.RegisterDataSourceAsync(
+    "server-status",
+    async () => new
+    {
+        onlinePlayers = (await context.SmpApi.GetPlayersAsync()).Count,
+        tps = await context.PerformanceMonitor.GetCurrentTpsAsync()
+    },
+    TimeSpan.FromSeconds(1)
+);
+
+// 取消数据源
+await context.DataBroadcaster.UnregisterDataSourceAsync("server-status");
+
+// 监听客户端连接
+context.DataBroadcaster.ClientConnected += (s, e) =>
+{
+    context.Logger.Info($"客户端 {e.ClientId} 连接到频道 {e.Channel}");
+};
+```
+
+---
+
 ## 📬 **IPluginMessenger**
 
 插件间通信接口，用于插件之间传递消息。
@@ -907,13 +1300,90 @@ _context.Messenger.SubscribeRequest<BalanceRequest, int>("get_balance",
 
 ---
 
+## 📁 **SafeFileReader**
+
+安全文件读取器，提供优化的文件读取方法（参考自 AATool 的最佳实践）。
+
+### **方法**
+
+```csharp
+public static class SafeFileReader
+{
+    /// <summary>安全地读取文本文件</summary>
+    Task<string> ReadTextAsync(string path, Encoding? encoding = null, 
+        CancellationToken cancellationToken = default);
+    
+    /// <summary>安全地读取 JSON 文件并反序列化</summary>
+    Task<T?> ReadJsonAsync<T>(string path, JsonSerializerOptions? options = null, 
+        CancellationToken cancellationToken = default);
+    
+    /// <summary>安全地读取二进制文件</summary>
+    Task<byte[]> ReadBytesAsync(string path, 
+        CancellationToken cancellationToken = default);
+    
+    /// <summary>安全地读取文件的部分内容</summary>
+    Task<byte[]> ReadPartialAsync(string path, long offset, int count, 
+        CancellationToken cancellationToken = default);
+    
+    /// <summary>检查文件是否存在且可读</summary>
+    bool CanRead(string path);
+    
+    /// <summary>等待文件可用</summary>
+    Task<bool> WaitForFileAsync(string path, TimeSpan timeout, 
+        TimeSpan? pollInterval = null, 
+        CancellationToken cancellationToken = default);
+}
+```
+
+### **特点**
+
+- ✅ **只读权限**：使用 `FileAccess.Read`
+- ✅ **允许共享**：`FileShare.ReadWrite | FileShare.Delete` 避免锁定文件
+- ✅ **异步操作**：不阻塞主线程
+- ✅ **安全可靠**：即使 Minecraft 正在写入文件也能读取
+
+### **使用示例**
+
+```csharp
+// 读取文本文件
+var content = await SafeFileReader.ReadTextAsync("path/to/file.txt");
+
+// 读取 JSON 文件
+var data = await SafeFileReader.ReadJsonAsync<PlayerData>("player.json");
+
+// 读取二进制文件
+var bytes = await SafeFileReader.ReadBytesAsync("data.bin");
+
+// 检查文件是否可读
+if (SafeFileReader.CanRead("config.json"))
+{
+    var config = await SafeFileReader.ReadJsonAsync<Config>("config.json");
+}
+
+// 等待文件可用（当文件被锁定时）
+var available = await SafeFileReader.WaitForFileAsync(
+    "locked-file.dat", 
+    TimeSpan.FromSeconds(5)
+);
+```
+
+---
+
 ## 📚 **相关文档**
 
+### 核心功能
 - [插件开发指南](../03-插件开发/插件开发指南.md)
 - [事件列表](./事件列表.md)
 - [命令系统](../02-核心功能/命令系统.md)
 
+### 高级功能
+- [成就和统计追踪](../04-高级功能/成就和统计追踪.md) ⭐ 新增
+- [排行榜系统](../04-高级功能/排行榜系统.md) ⭐ 新增
+- [WebSocket 数据推送](../04-高级功能/WebSocket数据推送.md) ⭐ 新增
+- [插件热重载](../04-高级功能/插件热重载.md)
+- [性能监控](../04-高级功能/性能监控.md)
+
 ---
 
 **文档维护者：** NetherGate 开发团队  
-**最后更新：** 2025-10-05
+**最后更新：** 2025-10-08

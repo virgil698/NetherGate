@@ -1,8 +1,10 @@
+using NetherGate.API.Analytics;
 using NetherGate.API.Audio;
 using NetherGate.API.Data;
 using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
 using NetherGate.API.GameDisplay;
+using NetherGate.API.Leaderboard;
 using NetherGate.API.Logging;
 using NetherGate.API.Localization;
 using NetherGate.API.Monitoring;
@@ -11,6 +13,7 @@ using NetherGate.API.Permissions;
 using NetherGate.API.Protocol;
 using NetherGate.API.Scheduling;
 using NetherGate.API.Utilities;
+using NetherGate.API.WebSocket;
 
 namespace NetherGate.API.Plugins;
 
@@ -206,6 +209,30 @@ public interface IPluginContext
     /// 注意：NetherGate 核心只提供 API 接口，具体实现由权限管理插件提供
     /// </summary>
     IPermissionManager PermissionManager { get; }
+
+    /// <summary>
+    /// 成就追踪器
+    /// 用于追踪玩家的成就进度
+    /// </summary>
+    IAdvancementTracker AdvancementTracker { get; }
+
+    /// <summary>
+    /// 统计数据追踪器
+    /// 用于追踪玩家的游戏统计数据
+    /// </summary>
+    IStatisticsTracker StatisticsTracker { get; }
+
+    /// <summary>
+    /// 排行榜系统
+    /// 用于创建和管理排行榜
+    /// </summary>
+    ILeaderboardSystem LeaderboardSystem { get; }
+
+    /// <summary>
+    /// 数据广播器
+    /// 用于通过 WebSocket 推送实时数据
+    /// </summary>
+    IDataBroadcaster DataBroadcaster { get; }
 
     /// <summary>
     /// 获取其他插件
