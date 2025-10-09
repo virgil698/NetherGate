@@ -3,6 +3,7 @@ using NetherGate.API.Data.Models;
 using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
 using NetherGate.API.Utilities;
+using NetherGate.Core.Utilities;
 
 namespace NetherGate.Core.Audio;
 
@@ -47,8 +48,8 @@ public class MusicPlayer : IMusicPlayer
 
                 if (!note.IsRest)
                 {
-                    var soundId = GetInstrumentSound(note.Instrument);
-                    var pitch = GetNotePitch(note.Note);
+                    var soundId = NoteUtils.GetInstrumentSound(note.Instrument);
+                    var pitch = NoteUtils.GetNotePitch(note.Note);
                     
                     await _gameDisplayApi.PlaySoundAsync(
                         soundId,
@@ -88,11 +89,11 @@ public class MusicPlayer : IMusicPlayer
 
     public async Task PlayChordAsync(string targets, IEnumerable<Note> notes, Instrument instrument = Instrument.Piano, Position? pos = null)
     {
-        var soundId = GetInstrumentSound(instrument);
+        var soundId = NoteUtils.GetInstrumentSound(instrument);
         
         foreach (var note in notes)
         {
-            var pitch = GetNotePitch(note);
+            var pitch = NoteUtils.GetNotePitch(note);
             _ = _gameDisplayApi.PlaySoundAsync(soundId, "record", targets, pos?.X, pos?.Y, pos?.Z, 1.0, pitch);
         }
 
@@ -116,35 +117,7 @@ public class MusicPlayer : IMusicPlayer
         IsPlaying = false;
     }
 
-    private string GetInstrumentSound(Instrument instrument)
-    {
-        return instrument switch
-        {
-            Instrument.Piano => "minecraft:block.note_block.harp",
-            Instrument.Bass => "minecraft:block.note_block.bass",
-            Instrument.BaseDrum => "minecraft:block.note_block.basedrum",
-            Instrument.Snare => "minecraft:block.note_block.snare",
-            Instrument.Hat => "minecraft:block.note_block.hat",
-            Instrument.Guitar => "minecraft:block.note_block.guitar",
-            Instrument.Flute => "minecraft:block.note_block.flute",
-            Instrument.Bell => "minecraft:block.note_block.bell",
-            Instrument.Chime => "minecraft:block.note_block.chime",
-            Instrument.Xylophone => "minecraft:block.note_block.xylophone",
-            Instrument.IronXylophone => "minecraft:block.note_block.iron_xylophone",
-            Instrument.CowBell => "minecraft:block.note_block.cow_bell",
-            Instrument.Didgeridoo => "minecraft:block.note_block.didgeridoo",
-            Instrument.Bit => "minecraft:block.note_block.bit",
-            Instrument.Banjo => "minecraft:block.note_block.banjo",
-            Instrument.Pling => "minecraft:block.note_block.pling",
-            _ => "minecraft:block.note_block.harp"
-        };
-    }
-
-    private double GetNotePitch(Note note)
-    {
-        var noteValue = (int)note;
-        return Math.Pow(2, (noteValue - 12) / 12.0);
-    }
+    // 音符转换功能已移至 NoteUtils 工具类
 
     private List<MusicNote> GetPredefinedMelodyNotes(PredefinedMelody melody)
     {

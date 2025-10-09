@@ -13,6 +13,7 @@ public class ItemComponentConverter : IItemComponentConverter
     private readonly ILogger _logger;
     private readonly ItemComponentReader _reader;
     private readonly PlayerDataReader _playerDataReader;
+    private readonly IPlayerProfileApi? _playerProfileApi;
 
     // NBT 到组件的映射表
     private static readonly Dictionary<string, string> NbtToComponentMapping = new()
@@ -35,11 +36,13 @@ public class ItemComponentConverter : IItemComponentConverter
     public ItemComponentConverter(
         ILogger logger,
         ItemComponentReader reader,
-        PlayerDataReader playerDataReader)
+        PlayerDataReader playerDataReader,
+        IPlayerProfileApi? playerProfileApi)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _playerDataReader = playerDataReader ?? throw new ArgumentNullException(nameof(playerDataReader));
+        _playerProfileApi = playerProfileApi;
     }
 
     /// <inheritdoc/>
@@ -123,8 +126,22 @@ public class ItemComponentConverter : IItemComponentConverter
                 return null;
             }
 
+            // 获取玩家的 UUID
+            if (_playerProfileApi == null)
+            {
+                _logger.Warning("PlayerProfileApi 未配置，无法转换玩家背包");
+                return null;
+            }
+            
+            var profile = await _playerProfileApi.FetchProfileByNameAsync(playerName);
+            if (profile == null)
+            {
+                _logger.Warning($"无法获取玩家 {playerName} 的 UUID");
+                return null;
+            }
+
             // 读取 NBT 格式的玩家数据
-            var playerData = await _playerDataReader.ReadPlayerDataAsync(Guid.Empty); // TODO: 获取实际 UUID
+            var playerData = await _playerDataReader.ReadPlayerDataAsync(profile.Uuid);
             if (playerData == null)
             {
                 _logger.Warning($"未找到玩家 {playerName} 的数据");

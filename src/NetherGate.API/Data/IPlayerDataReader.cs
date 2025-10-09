@@ -31,7 +31,15 @@ public interface IPlayerDataReader
     List<Guid> ListPlayers(string? worldName = null);
 
     /// <summary>
-    /// 获取在线玩家数据
+    /// 获取在线玩家数据（异步版本）
+    /// </summary>
+    /// <remarks>
+    /// 要求：IRconClient 已连接
+    /// </remarks>
+    Task<List<PlayerData>> GetOnlinePlayersAsync();
+
+    /// <summary>
+    /// 获取在线玩家数据（同步版本）
     /// </summary>
     List<PlayerData> GetOnlinePlayers();
 
@@ -116,6 +124,11 @@ public class PlayerData
     /// 是否在线
     /// </summary>
     public bool IsOnline { get; init; }
+
+    /// <summary>
+    /// 重生点信息（Minecraft 1.21.9+）
+    /// </summary>
+    public RespawnData? RespawnData { get; init; }
 }
 
 /// <summary>
@@ -152,6 +165,73 @@ public class PlayerPosition
     /// 俯仰角
     /// </summary>
     public float Pitch { get; init; }
+}
+
+/// <summary>
+/// 重生点数据（Minecraft 1.21.9+）
+/// </summary>
+public class RespawnData
+{
+    /// <summary>
+    /// 重生点 X 坐标
+    /// </summary>
+    public int X { get; init; }
+
+    /// <summary>
+    /// 重生点 Y 坐标
+    /// </summary>
+    public int Y { get; init; }
+
+    /// <summary>
+    /// 重生点 Z 坐标
+    /// </summary>
+    public int Z { get; init; }
+
+    /// <summary>
+    /// 重生点俯仰角（必选字段，Minecraft 1.21.9+）
+    /// </summary>
+    public float Pitch { get; init; }
+
+    /// <summary>
+    /// 重生点偏航角（可选）
+    /// </summary>
+    public float? Yaw { get; init; }
+
+    /// <summary>
+    /// 重生点所在维度
+    /// </summary>
+    public string Dimension { get; init; } = "minecraft:overworld";
+
+    /// <summary>
+    /// 是否强制重生（不跳过夜晚）
+    /// </summary>
+    public bool Forced { get; init; }
+
+    /// <summary>
+    /// 重生点锚定位置（如果设置了重生锚）
+    /// </summary>
+    public RespawnAnchorPosition? RespawnAnchor { get; init; }
+}
+
+/// <summary>
+/// 重生锚定位置
+/// </summary>
+public class RespawnAnchorPosition
+{
+    /// <summary>
+    /// X 坐标
+    /// </summary>
+    public int X { get; init; }
+
+    /// <summary>
+    /// Y 坐标
+    /// </summary>
+    public int Y { get; init; }
+
+    /// <summary>
+    /// Z 坐标
+    /// </summary>
+    public int Z { get; init; }
 }
 
 /// <summary>

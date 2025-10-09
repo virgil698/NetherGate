@@ -14,12 +14,14 @@ public class BlockDataReader : IBlockDataReader
     private readonly string _serverDirectory;
     private readonly ILogger _logger;
     private readonly WorldDataReader _worldDataReader;
+    private readonly AnvilChunkReader _anvilChunkReader;
 
     public BlockDataReader(string serverDirectory, ILogger logger, WorldDataReader worldDataReader)
     {
         _serverDirectory = Path.GetFullPath(serverDirectory);
         _logger = logger;
         _worldDataReader = worldDataReader;
+        _anvilChunkReader = new AnvilChunkReader(logger);
     }
 
     // ========== 容器物品读取 ==========
@@ -230,10 +232,13 @@ public class BlockDataReader : IBlockDataReader
     {
         try
         {
-            var (chunkX, chunkZ) = ((int)Math.Floor(pos.X / 16), (int)Math.Floor(pos.Z / 16));
+            // 计算区块坐标
+            var chunkX = (int)Math.Floor(pos.X / 16);
+            var chunkZ = (int)Math.Floor(pos.Z / 16);
             var regionX = (int)Math.Floor(chunkX / 32.0);
             var regionZ = (int)Math.Floor(chunkZ / 32.0);
 
+            // 确定维度路径
             var dimensionPath = dimension switch
             {
                 "overworld" => "world",
@@ -250,12 +255,37 @@ public class BlockDataReader : IBlockDataReader
                 return null;
             }
 
-            // 读取区块数据
-            // 注意：这里需要实现 Anvil 格式的区块读取
-            // 由于复杂性，这里提供简化版本
-            _logger.Warning("方块实体读取功能需要完整的区块文件解析，当前为简化实现");
-            
-            return await Task.FromResult<NbtCompound?>(null);
+            // 使用 AnvilChunkReader 读取区块
+            var chunkNbt = await _anvilChunkReader.ReadChunkAsync(regionPath, chunkX, chunkZ);
+            if (chunkNbt == null)
+            {
+                _logger.Debug($"无法读取区块 [{chunkX}, {chunkZ}]");
+                return null;
+            }
+
+            // 从区块中提取方块实体列表
+            var blockEntities = _anvilChunkReader.GetBlockEntitiesFromChunk(chunkNbt);
+            if (blockEntities.Count == 0)
+            {
+                _logger.Debug($"区块 [{chunkX}, {chunkZ}] 中没有方块实体");
+                return null;
+            }
+
+            // 查找指定位置的方块实体
+            var blockEntity = _anvilChunkReader.FindBlockEntityByPosition(
+                blockEntities,
+                (int)pos.X,
+                (int)pos.Y,
+                (int)pos.Z
+            );
+
+            if (blockEntity == null)
+            {
+                _logger.Debug($"位置 ({pos.X}, {pos.Y}, {pos.Z}) 没有方块实体");
+                return null;
+            }
+
+            return blockEntity;
         }
         catch (Exception ex)
         {

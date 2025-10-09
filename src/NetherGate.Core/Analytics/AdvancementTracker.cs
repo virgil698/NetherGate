@@ -16,6 +16,8 @@ public class AdvancementTracker : IAdvancementTracker
     private readonly IFileWatcher _fileWatcher;
     private readonly ConcurrentDictionary<string, PlayerAdvancementData> _cache = new();
     private bool _isTracking;
+    private int? _cachedTotalAdvancements;
+    private Dictionary<string, int>? _cachedCategoryAdvancementCounts;
 
     public event EventHandler<AdvancementCompletedEventArgs>? AdvancementCompleted;
 
@@ -109,11 +111,11 @@ public class AdvancementTracker : IAdvancementTracker
             : 0;
     }
 
-    public async Task StartTrackingAsync()
+    public Task StartTrackingAsync()
     {
         if (_isTracking)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         _isTracking = true;
@@ -125,16 +127,17 @@ public class AdvancementTracker : IAdvancementTracker
         }
 
         // 监听成就文件变化
-        _fileWatcher.Watch(advancementDir, "*.json", async (filePath, changeType) =>
+        _fileWatcher.WatchDirectory(advancementDir, "*.json", false, e =>
         {
-            if (changeType == WatcherChangeTypes.Changed || changeType == WatcherChangeTypes.Created)
+            if (e.ChangeType == FileChangeType.Modified || e.ChangeType == FileChangeType.Created)
             {
-                var playerUuid = Path.GetFileNameWithoutExtension(filePath);
-                await OnAdvancementFileChanged(playerUuid, filePath);
+                var playerUuid = Path.GetFileNameWithoutExtension(e.FilePath);
+                _ = OnAdvancementFileChanged(playerUuid, e.FilePath);
             }
         });
 
         _logger.Info("Advancement tracking started");
+        return Task.CompletedTask;
     }
 
     public Task StopTrackingAsync()
@@ -242,23 +245,106 @@ public class AdvancementTracker : IAdvancementTracker
 
     private int GetTotalAdvancements()
     {
-        // Minecraft 1.21 大约有 120+ 个成就
-        // 这个数字应该根据版本动态获取
+        // 使用缓存避免重复文件扫描
+        if (_cachedTotalAdvancements.HasValue)
+            return _cachedTotalAdvancements.Value;
+
+        try
+        {
+            // 从世界路径向上查找服务器根目录
+            var serverDirectory = Path.GetFullPath(Path.Combine(_worldPath, ".."));
+            var advancementsPath = Path.Combine(serverDirectory, "data", "minecraft", "advancements");
+            
+            if (Directory.Exists(advancementsPath))
+            {
+                // 递归扫描所有成就 JSON 文件
+                var advancementFiles = Directory.GetFiles(advancementsPath, "*.json", SearchOption.AllDirectories);
+                
+                // 过滤掉非成就文件（如 recipes/）
+                var count = advancementFiles.Count(f => 
+                {
+                    var relativePath = Path.GetRelativePath(advancementsPath, f);
+                    return !relativePath.StartsWith("recipes", StringComparison.OrdinalIgnoreCase);
+                });
+
+                _cachedTotalAdvancements = count;
+                _logger.Debug($"动态加载成就总数: {count}");
+                return count;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"无法动态加载成就总数: {ex.Message}");
+        }
+
+        // 降级到默认值（Minecraft 1.21）
+        _cachedTotalAdvancements = 122;
         return 122;
     }
 
     private int GetTotalAdvancementsForCategory(string category)
     {
-        // 各类别的成就数量（示例数据，应该根据实际版本调整）
-        return category.ToLower() switch
+        // 使用缓存
+        if (_cachedCategoryAdvancementCounts == null)
         {
-            "story" => 12,
-            "nether" => 9,
-            "end" => 5,
-            "adventure" => 19,
-            "husbandry" => 10,
-            _ => 0
-        };
+            _cachedCategoryAdvancementCounts = LoadCategoryAdvancementCounts();
+        }
+
+        return _cachedCategoryAdvancementCounts.TryGetValue(category.ToLower(), out var count) ? count : 0;
+    }
+
+    /// <summary>
+    /// 动态加载各类别的成就数量
+    /// </summary>
+    private Dictionary<string, int> LoadCategoryAdvancementCounts()
+    {
+        var counts = new Dictionary<string, int>();
+
+        try
+        {
+            var serverDirectory = Path.GetFullPath(Path.Combine(_worldPath, ".."));
+            var advancementsPath = Path.Combine(serverDirectory, "data", "minecraft", "advancements");
+            
+            if (Directory.Exists(advancementsPath))
+            {
+                var categories = new[] { "story", "nether", "end", "adventure", "husbandry" };
+                
+                foreach (var category in categories)
+                {
+                    var categoryPath = Path.Combine(advancementsPath, category);
+                    if (Directory.Exists(categoryPath))
+                    {
+                        var categoryFiles = Directory.GetFiles(categoryPath, "*.json", SearchOption.AllDirectories);
+                        counts[category] = categoryFiles.Length;
+                    }
+                    else
+                    {
+                        counts[category] = 0;
+                    }
+                }
+
+                _logger.Debug($"动态加载成就类别数量: {string.Join(", ", counts.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"无法动态加载类别成就数量: {ex.Message}");
+        }
+
+        // 如果加载失败，使用默认值
+        if (!counts.Any())
+        {
+            counts = new Dictionary<string, int>
+            {
+                ["story"] = 12,
+                ["nether"] = 9,
+                ["end"] = 5,
+                ["adventure"] = 19,
+                ["husbandry"] = 10
+            };
+        }
+
+        return counts;
     }
 
     private string GetAdvancementDisplayName(string advancementId)

@@ -1,6 +1,7 @@
 using NetherGate.API.GameDisplay;
 using NetherGate.API.Logging;
 using NetherGate.API.Protocol;
+using NetherGate.Core.Utilities;
 using System.Text.RegularExpressions;
 
 namespace NetherGate.Core.GameDisplay;
@@ -28,13 +29,13 @@ public class GameDisplayApi : IGameDisplayApi
         await ExecuteCommandAsync($"title {targets} times {fadeIn} {stay} {fadeOut}");
         
         // 显示主标题
-        var titleJson = EscapeJson(title);
+        var titleJson = StringEscapeUtils.EscapeJson(title);
         await ExecuteCommandAsync($"title {targets} title {titleJson}");
         
         // 显示副标题（如果有）
         if (!string.IsNullOrEmpty(subtitle))
         {
-            var subtitleJson = EscapeJson(subtitle);
+            var subtitleJson = StringEscapeUtils.EscapeJson(subtitle);
             await ExecuteCommandAsync($"title {targets} subtitle {subtitleJson}");
         }
     }
@@ -53,7 +54,7 @@ public class GameDisplayApi : IGameDisplayApi
 
     public async Task ShowActionBarAsync(string targets, string message)
     {
-        var messageJson = EscapeJson(message);
+        var messageJson = StringEscapeUtils.EscapeJson(message);
         await ExecuteCommandAsync($"title {targets} actionbar {messageJson}");
     }
 
@@ -61,7 +62,7 @@ public class GameDisplayApi : IGameDisplayApi
 
     public async Task CreateBossBarAsync(string id, string name, BossBarColor color = BossBarColor.Purple, BossBarStyle style = BossBarStyle.Progress)
     {
-        var nameJson = EscapeJson(name);
+        var nameJson = StringEscapeUtils.EscapeJson(name);
         var colorStr = color.ToString().ToLower();
         var styleStr = ConvertBossBarStyle(style);
         
@@ -77,7 +78,7 @@ public class GameDisplayApi : IGameDisplayApi
 
     public async Task SetBossBarNameAsync(string id, string name)
     {
-        var nameJson = EscapeJson(name);
+        var nameJson = StringEscapeUtils.EscapeJson(name);
         await ExecuteCommandAsync($"bossbar set {id} name {nameJson}");
     }
 
@@ -144,7 +145,7 @@ public class GameDisplayApi : IGameDisplayApi
         }
         else
         {
-            var displayJson = EscapeJson(displayName);
+            var displayJson = StringEscapeUtils.EscapeJson(displayName);
             await ExecuteCommandAsync($"scoreboard objectives add {name} {criteria} {displayJson}");
         }
     }
@@ -249,7 +250,7 @@ public class GameDisplayApi : IGameDisplayApi
 
     public async Task SendChatMessageAsync(string targets, string message)
     {
-        var jsonText = EscapeJson(message);
+        var jsonText = StringEscapeUtils.EscapeJson(message);
         await ExecuteCommandAsync($"tellraw {targets} {jsonText}");
     }
 
@@ -287,8 +288,8 @@ public class GameDisplayApi : IGameDisplayApi
     public async Task ShowNoticeDialogAsync(string targets, string title, string body)
     {
         // 转义特殊字符
-        var escapedTitle = EscapeForSnbt(title);
-        var escapedBody = EscapeForSnbt(body);
+        var escapedTitle = StringEscapeUtils.EscapeSnbt(title);
+        var escapedBody = StringEscapeUtils.EscapeSnbt(body);
         
         // 构建 SNBT 格式的对话框数据
         var dialogSnbt = $"{{type:\"minecraft:notice\",title:\"{escapedTitle}\",body:[{{type:\"minecraft:plain_message\",contents:\"{escapedBody}\"}}]}}";
@@ -543,22 +544,6 @@ public class GameDisplayApi : IGameDisplayApi
     }
 
     /// <summary>
-    /// 转义 JSON 文本（如果不是 JSON 格式，则包装为简单 JSON）
-    /// </summary>
-    private string EscapeJson(string text)
-    {
-        // 如果已经是 JSON 格式（以 { 或 [ 开头），直接返回
-        if (text.TrimStart().StartsWith("{") || text.TrimStart().StartsWith("["))
-        {
-            return text;
-        }
-        
-        // 否则包装为简单的 JSON 文本组件
-        var escaped = text.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        return $"{{\"text\":\"{escaped}\"}}";
-    }
-
-    /// <summary>
     /// 转换 BossBar 样式枚举到 Minecraft 命令格式
     /// </summary>
     private string ConvertBossBarStyle(BossBarStyle style)
@@ -572,20 +557,6 @@ public class GameDisplayApi : IGameDisplayApi
             BossBarStyle.Notched_20 => "notched_20",
             _ => "progress"
         };
-    }
-
-    /// <summary>
-    /// 为 SNBT 格式转义字符串
-    /// </summary>
-    private string EscapeForSnbt(string text)
-    {
-        // 转义 SNBT 中的特殊字符
-        return text
-            .Replace("\\", "\\\\")  // 反斜杠
-            .Replace("\"", "\\\"")  // 双引号
-            .Replace("\n", "\\n")   // 换行符
-            .Replace("\r", "\\r")   // 回车符
-            .Replace("\t", "\\t");  // 制表符
     }
 
     /// <summary>

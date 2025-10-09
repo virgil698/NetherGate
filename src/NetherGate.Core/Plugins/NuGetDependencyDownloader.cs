@@ -202,7 +202,10 @@ public class NuGetDependencyDownloader
         {
             File.Delete(tempPath);
         }
-        catch { }
+        catch (Exception ex) 
+        { 
+            _logger.Debug($"清理临时 NuGet 包文件失败 ({tempPath}): {ex.Message}"); 
+        }
 
         return extractResult;
     }

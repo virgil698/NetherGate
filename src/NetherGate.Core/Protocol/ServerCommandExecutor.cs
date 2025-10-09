@@ -58,7 +58,14 @@ public class ServerCommandExecutor : IServerCommandExecutor
                     var resp = await _rcon.ExecuteCommandAsync(command);
                     if (_eventBus != null)
                     {
-                        try { await _eventBus.PublishAsync(new ServerCommandResponseEvent { Command = command, Success = true, Response = resp, Channel = "rcon" }); } catch { }
+                        try 
+                        { 
+                            await _eventBus.PublishAsync(new ServerCommandResponseEvent { Command = command, Success = true, Response = resp, Channel = "rcon" }); 
+                        } 
+                        catch (Exception ex) 
+                        { 
+                            _logger.Debug($"发布 RCON 命令响应事件失败: {ex.Message}"); 
+                        }
                     }
                     RecordStats(true, sw.Elapsed.TotalMilliseconds);
                     return true;
@@ -78,7 +85,14 @@ public class ServerCommandExecutor : IServerCommandExecutor
                     await _processManager.SendCommandAsync(command);
                     if (_eventBus != null)
                     {
-                        try { await _eventBus.PublishAsync(new ServerCommandResponseEvent { Command = command, Success = true, Response = null, Channel = "stdin" }); } catch { }
+                        try 
+                        { 
+                            await _eventBus.PublishAsync(new ServerCommandResponseEvent { Command = command, Success = true, Response = null, Channel = "stdin" }); 
+                        } 
+                        catch (Exception ex) 
+                        { 
+                            _logger.Debug($"发布 STDIN 命令响应事件失败: {ex.Message}"); 
+                        }
                     }
                     RecordStats(true, sw.Elapsed.TotalMilliseconds);
                     return true;
@@ -116,7 +130,14 @@ public class ServerCommandExecutor : IServerCommandExecutor
                     var resp = await _rcon.ExecuteCommandAsync(command);
                     if (_eventBus != null)
                     {
-                        try { await _eventBus.PublishAsync(new ServerCommandResponseEvent { Command = command, Success = true, Response = resp, Channel = "rcon" }); } catch { }
+                        try 
+                        { 
+                            await _eventBus.PublishAsync(new ServerCommandResponseEvent { Command = command, Success = true, Response = resp, Channel = "rcon" }); 
+                        } 
+                        catch (Exception ex) 
+                        { 
+                            _logger.Debug($"发布 RCON 命令响应事件失败 (带响应): {ex.Message}"); 
+                        }
                     }
                     RecordStats(true, sw.Elapsed.TotalMilliseconds);
                     return (true, resp);

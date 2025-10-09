@@ -66,7 +66,14 @@ public class EventBridge : IDisposable
 
     public void Dispose()
     {
-        try { StopAsync().Wait(); } catch { }
+        try 
+        { 
+            StopAsync().Wait(); 
+        } 
+        catch (Exception ex) 
+        { 
+            _logger.Debug($"Dispose 时停止 EventBridge 失败: {ex.Message}"); 
+        }
     }
 }
 

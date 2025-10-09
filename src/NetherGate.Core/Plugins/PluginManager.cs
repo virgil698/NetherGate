@@ -10,6 +10,7 @@ using NetherGate.API.Network;
 using NetherGate.API.Permissions;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
+using NetherGate.API.Scoreboard;
 using NetherGate.API.Utilities;
 using NetherGate.Core.Audio;
 using NetherGate.Core.Data;
@@ -45,6 +46,9 @@ public class PluginManager
     private IBackupManager? _backupManager;
     private IPerformanceMonitor? _performanceMonitor;
     private IPlayerDataReader? _playerDataReader;
+    private IPlayerProfileApi? _playerProfileApi;
+    private ITagApi? _tagApi;
+    private IScoreboardApi? _scoreboardApi;
     private IWorldDataReader? _worldDataReader;
     private INbtDataWriter? _nbtDataWriter;
     private IItemComponentReader? _itemComponentReader;
@@ -135,6 +139,36 @@ public class PluginManager
     private IPlayerDataReader GetPlayerDataReader()
     {
         return _playerDataReader ??= new PlayerDataReader(_serverDirectory, _logger);
+    }
+    
+    /// <summary>
+    /// 获取或创建玩家档案 API
+    /// </summary>
+    private IPlayerProfileApi? GetPlayerProfileApi()
+    {
+        if (_rconClient == null)
+            return null;
+            
+        return _playerProfileApi ??= _serviceProvider?.GetService(typeof(IPlayerProfileApi)) as IPlayerProfileApi
+            ?? new PlayerProfileApi(_rconClient, _logger);
+    }
+    
+    /// <summary>
+    /// 获取或创建标签系统 API
+    /// </summary>
+    private ITagApi GetTagApi()
+    {
+        return _tagApi ??= _serviceProvider?.GetService(typeof(ITagApi)) as ITagApi
+            ?? new TagApi(_serverDirectory, _logger, _rconClient);
+    }
+    
+    /// <summary>
+    /// 获取或创建计分板系统 API
+    /// </summary>
+    private IScoreboardApi GetScoreboardApi()
+    {
+        return _scoreboardApi ??= _serviceProvider?.GetService(typeof(IScoreboardApi)) as IScoreboardApi
+            ?? new NetherGate.Core.Scoreboard.ScoreboardApi(_logger, _rconClient);
     }
     
     /// <summary>
@@ -268,7 +302,11 @@ public class PluginManager
     /// </summary>
     private IItemComponentConverter GetItemComponentConverter()
     {
-        return _itemComponentConverter ??= new ItemComponentConverter(_logger, (ItemComponentReader)GetItemComponentReader(), (PlayerDataReader)GetPlayerDataReader());
+        return _itemComponentConverter ??= new ItemComponentConverter(
+            _logger, 
+            (ItemComponentReader)GetItemComponentReader(), 
+            (PlayerDataReader)GetPlayerDataReader(),
+            GetPlayerProfileApi());
     }
 
     /// <summary>
@@ -399,6 +437,9 @@ public class PluginManager
                 GetBackupManager(),
                 GetPerformanceMonitor(),
                 GetPlayerDataReader(),
+                GetPlayerProfileApi(),
+                GetTagApi(),
+                GetScoreboardApi(),
                 GetWorldDataReader(),
                 GetNbtDataWriter(),
                 GetItemComponentReader(),
@@ -649,6 +690,9 @@ public class PluginManager
                 GetBackupManager(),
                 GetPerformanceMonitor(),
                 GetPlayerDataReader(),
+                GetPlayerProfileApi(),
+                GetTagApi(),
+                GetScoreboardApi(),
                 GetWorldDataReader(),
                 GetNbtDataWriter(),
                 GetItemComponentReader(),

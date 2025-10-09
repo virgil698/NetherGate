@@ -2,6 +2,7 @@ using NetherGate.API.Data;
 using NetherGate.API.Data.Models;
 using NetherGate.API.Logging;
 using NetherGate.API.Protocol;
+using NetherGate.Core.Utilities;
 using System.Text;
 using System.Text.Json;
 
@@ -275,7 +276,7 @@ public class ItemComponentWriter : IItemComponentWriter
         return value switch
         {
             null => "null",
-            string str => $"'{EscapeSnbtString(str)}'",
+            string str => StringEscapeUtils.QuoteSnbt(str),
             bool b => b ? "true" : "false",
             int i => i.ToString(),
             long l => $"{l}L",
@@ -337,15 +338,6 @@ public class ItemComponentWriter : IItemComponentWriter
         return sb.ToString();
     }
 
-    /// <summary>
-    /// 转义 SNBT 字符串
-    /// </summary>
-    private string EscapeSnbtString(string str)
-    {
-        return str
-            .Replace("\\", "\\\\")
-            .Replace("'", "\\'")
-            .Replace("\"", "\\\"");
-    }
+    // SNBT 转义功能已移至 StringEscapeUtils 工具类
 }
 

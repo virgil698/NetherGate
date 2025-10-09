@@ -77,6 +77,12 @@ public class WebSocketResponse : WebSocketMessage
     /// </summary>
     public string? Error { get; set; }
 
+    /// <summary>
+    /// 创建成功的 WebSocket 响应
+    /// </summary>
+    /// <param name="data">响应数据</param>
+    /// <param name="requestId">请求 ID</param>
+    /// <returns>WebSocket 响应对象</returns>
     public static WebSocketResponse Ok(object? data = null, string? requestId = null)
     {
         return new WebSocketResponse
@@ -88,6 +94,12 @@ public class WebSocketResponse : WebSocketMessage
         };
     }
 
+    /// <summary>
+    /// 创建失败的 WebSocket 响应
+    /// </summary>
+    /// <param name="error">错误信息</param>
+    /// <param name="requestId">请求 ID</param>
+    /// <returns>WebSocket 响应对象</returns>
     public static WebSocketResponse Fail(string error, string? requestId = null)
     {
         return new WebSocketResponse
@@ -110,6 +122,9 @@ public class WebSocketEvent : WebSocketMessage
     /// </summary>
     public string Event { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 初始化 WebSocket 事件
+    /// </summary>
     public WebSocketEvent()
     {
         Type = "event";

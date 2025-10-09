@@ -55,6 +55,9 @@ public record ServerAddress
     /// </summary>
     public string? FriendlyName { get; init; }
 
+    /// <summary>
+    /// 返回服务器地址的字符串表示形式
+    /// </summary>
     public override string ToString() => $"{Host}:{Port}";
 }
 

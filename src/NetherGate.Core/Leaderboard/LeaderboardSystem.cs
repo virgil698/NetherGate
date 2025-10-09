@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using NetherGate.API.Leaderboard;
 using NetherGate.API.Logging;
+using LeaderboardModel = NetherGate.API.Leaderboard.Leaderboard;
 
 namespace NetherGate.Core.Leaderboard;
 
@@ -12,7 +13,7 @@ public class LeaderboardSystem : ILeaderboardSystem
 {
     private readonly ILogger _logger;
     private readonly string _dataPath;
-    private readonly ConcurrentDictionary<string, Leaderboard> _leaderboards = new();
+    private readonly ConcurrentDictionary<string, LeaderboardModel> _leaderboards = new();
 
     public event EventHandler<ScoreUpdatedEventArgs>? ScoreUpdated;
     public event EventHandler<RankChangedEventArgs>? RankChanged;
@@ -28,14 +29,14 @@ public class LeaderboardSystem : ILeaderboardSystem
         }
     }
 
-    public async Task<Leaderboard> CreateLeaderboardAsync(string name, LeaderboardType type, string? displayName = null)
+    public async Task<LeaderboardModel> CreateLeaderboardAsync(string name, LeaderboardType type, string? displayName = null)
     {
         if (_leaderboards.ContainsKey(name))
         {
             throw new InvalidOperationException($"Leaderboard '{name}' already exists");
         }
 
-        var leaderboard = new Leaderboard
+        var leaderboard = new LeaderboardModel
         {
             Name = name,
             DisplayName = displayName ?? name,
@@ -51,11 +52,11 @@ public class LeaderboardSystem : ILeaderboardSystem
         return leaderboard;
     }
 
-    public async Task<bool> DeleteLeaderboardAsync(string name)
+    public Task<bool> DeleteLeaderboardAsync(string name)
     {
         if (!_leaderboards.TryRemove(name, out _))
         {
-            return false;
+            return Task.FromResult(false);
         }
 
         var filePath = GetLeaderboardFilePath(name);
@@ -65,15 +66,15 @@ public class LeaderboardSystem : ILeaderboardSystem
         }
 
         _logger.Info($"Deleted leaderboard: {name}");
-        return true;
+        return Task.FromResult(true);
     }
 
-    public Task<Leaderboard?> GetLeaderboardAsync(string name)
+    public Task<LeaderboardModel?> GetLeaderboardAsync(string name)
     {
         return Task.FromResult(_leaderboards.TryGetValue(name, out var leaderboard) ? leaderboard : null);
     }
 
-    public Task<List<Leaderboard>> GetAllLeaderboardsAsync()
+    public Task<List<LeaderboardModel>> GetAllLeaderboardsAsync()
     {
         return Task.FromResult(_leaderboards.Values.ToList());
     }
@@ -206,7 +207,7 @@ public class LeaderboardSystem : ILeaderboardSystem
             try
             {
                 var json = await File.ReadAllTextAsync(file);
-                var leaderboard = JsonSerializer.Deserialize<Leaderboard>(json);
+                var leaderboard = JsonSerializer.Deserialize<LeaderboardModel>(json);
                 if (leaderboard != null)
                 {
                     _leaderboards[leaderboard.Name] = leaderboard;
@@ -220,7 +221,7 @@ public class LeaderboardSystem : ILeaderboardSystem
         }
     }
 
-    private void SortLeaderboard(Leaderboard leaderboard)
+    private void SortLeaderboard(LeaderboardModel leaderboard)
     {
         // 根据类型排序
         switch (leaderboard.Type)
@@ -243,7 +244,7 @@ public class LeaderboardSystem : ILeaderboardSystem
         }
     }
 
-    private async Task SaveLeaderboardAsync(Leaderboard leaderboard)
+    private async Task SaveLeaderboardAsync(LeaderboardModel leaderboard)
     {
         var filePath = GetLeaderboardFilePath(leaderboard.Name);
         var json = JsonSerializer.Serialize(leaderboard, new JsonSerializerOptions

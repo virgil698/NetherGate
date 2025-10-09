@@ -4,6 +4,7 @@ using NetherGate.API.Extensions;
 using NetherGate.API.Logging;
 using NetherGate.API.Protocol;
 using NetherGate.API.Utilities;
+using NetherGate.Core.Utilities;
 
 namespace NetherGate.Core.Data;
 
@@ -271,7 +272,7 @@ public class BlockDataWriter : IBlockDataWriter
         if (lines.Count > 4) lines = lines.Take(4).ToList();
 
         // 构建 NBT 数据
-        var frontTextNbt = $"{{messages:['\"{EscapeJson(lines[0])}\"','\"{EscapeJson(lines[1])}\"','\"{EscapeJson(lines[2])}\"','\"{EscapeJson(lines[3])}\"']}}";
+        var frontTextNbt = $"{{messages:[{StringEscapeUtils.QuoteSnbt(lines[0], true)},{StringEscapeUtils.QuoteSnbt(lines[1], true)},{StringEscapeUtils.QuoteSnbt(lines[2], true)},{StringEscapeUtils.QuoteSnbt(lines[3], true)}]}}";
         
         await ExecuteInDimensionAsync(dimension, $"data merge block {posStr} {{front_text:{frontTextNbt}}}");
 
@@ -329,7 +330,7 @@ public class BlockDataWriter : IBlockDataWriter
 
                     if (!string.IsNullOrEmpty(item.CustomName))
                     {
-                        tagParts.Add($"display:{{Name:'\"{EscapeJson(item.CustomName)}\"'}}");
+                        tagParts.Add($"display:{{Name:{StringEscapeUtils.QuoteSnbt(item.CustomName, true)}}}");
                     }
 
                     if (item.Enchantments?.Any() == true)
@@ -378,7 +379,7 @@ public class BlockDataWriter : IBlockDataWriter
     {
         return value switch
         {
-            string s => $"\"{EscapeJson(s)}\"",
+            string s => StringEscapeUtils.QuoteSnbt(s, true),
             int i => $"{i}",
             long l => $"{l}L",
             float f => $"{f}f",
@@ -390,9 +391,6 @@ public class BlockDataWriter : IBlockDataWriter
         };
     }
 
-    private string EscapeJson(string text)
-    {
-        return text.Replace("\\", "\\\\").Replace("\"", "\\\"");
-    }
+    // JSON 转义功能已移至 StringEscapeUtils 工具类
 }
 

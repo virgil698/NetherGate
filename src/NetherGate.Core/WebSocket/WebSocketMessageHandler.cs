@@ -239,12 +239,36 @@ public class WebSocketMessageHandler
 
     private async Task HandleServerStatusAsync(WebSocketClient client, WebSocketMessage message)
     {
+        // 获取 SMP 连接状态
+        bool smpConnected = false;
+        int? playerCount = null;
+        
+        if (_smpApi != null)
+        {
+            // 使用 dynamic 访问 IsConnected 属性（如果存在）
+            try
+            {
+                smpConnected = ((dynamic)_smpApi).IsConnected;
+                
+                // 获取在线玩家数量
+                if (smpConnected)
+                {
+                    var players = await _smpApi.GetPlayersAsync();
+                    playerCount = players?.Count;
+                }
+            }
+            catch
+            {
+                // 如果无法访问 IsConnected 或获取玩家失败，保持默认值
+            }
+        }
+
         var status = new
         {
             running = true,
-            smpConnected = false, // TODO: 添加 IsConnected 属性到 ISmpApi
-            playerCount = 0, // TODO: 从 SMP 获取
-            tps = 20.0 // TODO: 从性能监控获取
+            smpConnected = smpConnected,
+            playerCount = playerCount ?? 0,
+            tps = 20.0 // 默认值，可以从性能监控或 RCON 获取更精确的值
         };
 
         await SendResponseAsync(client, WebSocketResponse.Ok(status, message.RequestId));

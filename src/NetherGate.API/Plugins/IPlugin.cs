@@ -87,6 +87,9 @@ public class PluginInfo
     /// </summary>
     public int LoadOrder { get; set; } = 100;
 
+    /// <summary>
+    /// 返回插件信息的字符串表示形式
+    /// </summary>
     public override string ToString() => $"{Name} v{Version} by {Author}";
 }
 

@@ -68,6 +68,13 @@ public class PluginContainer
     /// </summary>
     public Exception? Exception { get; set; }
 
+    /// <summary>
+    /// 初始化插件容器
+    /// </summary>
+    /// <param name="metadata">插件元数据</param>
+    /// <param name="pluginDirectory">插件目录</param>
+    /// <param name="assemblyPath">程序集路径</param>
+    /// <param name="dataDirectory">数据目录</param>
     public PluginContainer(
         PluginMetadata metadata,
         string pluginDirectory,
@@ -130,6 +137,9 @@ public class PluginContainer
         Exception = null;
     }
 
+    /// <summary>
+    /// 返回插件容器的字符串表示形式
+    /// </summary>
     public override string ToString()
     {
         return $"{Name} v{Version} [{State}]";

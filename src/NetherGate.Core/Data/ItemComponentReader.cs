@@ -3,6 +3,7 @@ using NetherGate.API.Data;
 using NetherGate.API.Data.Models;
 using NetherGate.API.Logging;
 using NetherGate.API.Protocol;
+using NetherGate.Core.Utilities;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -17,17 +18,20 @@ public class ItemComponentReader : IItemComponentReader
     private readonly string _serverDirectory;
     private readonly IRconClient? _rconClient;
     private readonly ILogger _logger;
+    private readonly IPlayerProfileApi? _playerProfileApi;
     private readonly Dictionary<string, Guid> _playerNameToUuid = new();
     private Version? _cachedVersion;
 
     public ItemComponentReader(
         string serverDirectory,
         IRconClient? rconClient,
-        ILogger logger)
+        ILogger logger,
+        IPlayerProfileApi? playerProfileApi = null)
     {
         _serverDirectory = Path.GetFullPath(serverDirectory);
         _rconClient = rconClient;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _playerProfileApi = playerProfileApi;
     }
 
     /// <inheritdoc/>
@@ -296,9 +300,60 @@ public class ItemComponentReader : IItemComponentReader
             }
 
             // 解析 SNBT 格式的响应
-            // TODO: 实现 SNBT 解析器
-            _logger.Warning("SNBT 解析功能尚未实现，回退到文件系统读取");
-            return await ReadOfflinePlayerInventoryAsync(playerName);
+            // Minecraft 的响应格式: "player has the following entity data: [...]"
+            var snbtStart = response.IndexOf('[');
+            if (snbtStart < 0)
+            {
+                _logger.Warning($"无法解析 RCON 响应: {response}");
+                return await ReadOfflinePlayerInventoryAsync(playerName);
+            }
+
+            var snbtData = response[snbtStart..];
+            var nbtTag = SnbtParser.Parse(snbtData);
+            
+            if (nbtTag == null || nbtTag is not NbtList inventoryList)
+            {
+                _logger.Warning("SNBT 解析失败，回退到文件系统读取");
+                return await ReadOfflinePlayerInventoryAsync(playerName);
+            }
+
+            // 获取玩家 UUID（从玩家档案 API）
+            Guid playerUuid = Guid.Empty;
+            if (_playerProfileApi != null)
+            {
+                var profile = await _playerProfileApi.FetchProfileByNameAsync(playerName);
+                playerUuid = profile?.Uuid ?? Guid.Empty;
+            }
+
+            // 解析物品列表
+            var items = new List<ItemComponents>();
+            foreach (var tag in inventoryList)
+            {
+                if (tag is NbtCompound itemTag)
+                {
+                    var itemComponents = ParseItemFromNbt(itemTag);
+                    if (itemComponents != null)
+                    {
+                        items.Add(itemComponents);
+                    }
+                }
+            }
+
+            // 按槽位分类物品
+            var inventory = items.Where(i => i.Slot >= 0 && i.Slot <= 35).ToList();
+            var armor = items.Where(i => i.Slot >= 100 && i.Slot <= 103).ToList();
+            var offhand = items.Where(i => i.Slot == -106).ToList();
+
+            var version = await GetServerVersionAsync();
+            return new PlayerInventoryComponents
+            {
+                PlayerName = playerName,
+                PlayerUuid = playerUuid,
+                Inventory = inventory,
+                Armor = armor,
+                Offhand = offhand.FirstOrDefault(),
+                ServerVersion = version.ToString()
+            };
         }
         catch (Exception ex)
         {
@@ -583,29 +638,11 @@ public class ItemComponentReader : IItemComponentReader
 
         try
         {
-            // 扫描 usercache.json
-            var usercachePath = Path.Combine(_serverDirectory, "usercache.json");
-            if (File.Exists(usercachePath))
+            var uuid = await UuidUtils.GetPlayerUuidFromCacheAsync(_serverDirectory, playerName);
+            if (uuid != Guid.Empty)
             {
-                var json = await File.ReadAllTextAsync(usercachePath);
-                var entries = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json);
-                
-                if (entries != null)
-                {
-                    var entry = entries.FirstOrDefault(e =>
-                        e.TryGetValue("name", out var nameElement) &&
-                        nameElement.GetString()?.Equals(playerName, StringComparison.OrdinalIgnoreCase) == true);
-
-                    if (entry != null && entry.TryGetValue("uuid", out var uuidElement))
-                    {
-                        var uuidString = uuidElement.GetString()?.Replace("-", "");
-                        if (Guid.TryParse(uuidString, out var uuid))
-                        {
-                            _playerNameToUuid[playerName] = uuid;
-                            return uuid;
-                        }
-                    }
-                }
+                _playerNameToUuid[playerName] = uuid;
+                return uuid;
             }
         }
         catch (Exception ex)

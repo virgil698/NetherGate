@@ -128,7 +128,14 @@ public class RconService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        try { StopAsync().Wait(); } catch { }
+        try 
+        { 
+            StopAsync().Wait(); 
+        } 
+        catch (Exception ex) 
+        { 
+            _logger.Debug($"Dispose 时停止 RconService 失败: {ex.Message}"); 
+        }
     }
 }
 

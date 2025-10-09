@@ -86,6 +86,9 @@ public record TpsData
     /// </summary>
     public double Average => (Tps1m + Tps5m + Tps15m) / 3.0;
 
+    /// <summary>
+    /// 返回 TPS 数据的字符串表示形式
+    /// </summary>
     public override string ToString() => $"TPS: {Tps1m:F1} / {Tps5m:F1} / {Tps15m:F1}";
 }
 
@@ -109,6 +112,9 @@ public record MsptData
     /// </summary>
     public double Max { get; init; }
 
+    /// <summary>
+    /// 返回 MSPT 数据的字符串表示形式
+    /// </summary>
     public override string ToString() => $"MSPT: {Average:F1}ms (min: {Min:F1}, max: {Max:F1})";
 }
 

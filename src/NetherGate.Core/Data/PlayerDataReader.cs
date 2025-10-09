@@ -1,6 +1,8 @@
 using fNbt;
 using NetherGate.API.Data;
 using NetherGate.API.Logging;
+using NetherGate.API.Protocol;
+using System.Text.RegularExpressions;
 
 namespace NetherGate.Core.Data;
 
@@ -12,11 +14,13 @@ public class PlayerDataReader : IPlayerDataReader
 {
     private readonly string _serverDirectory;
     private readonly ILogger _logger;
+    private readonly IRconClient? _rconClient;
 
-    public PlayerDataReader(string serverDirectory, ILogger logger)
+    public PlayerDataReader(string serverDirectory, ILogger logger, IRconClient? rconClient = null)
     {
         _serverDirectory = Path.GetFullPath(serverDirectory);
         _logger = logger;
+        _rconClient = rconClient;
     }
 
     public async Task<PlayerData?> ReadPlayerDataAsync(Guid playerUuid)
@@ -115,12 +119,129 @@ public class PlayerDataReader : IPlayerDataReader
         }
     }
 
+    public async Task<List<PlayerData>> GetOnlinePlayersAsync()
+    {
+        try
+        {
+            if (_rconClient == null || !_rconClient.IsConnected)
+            {
+                _logger.Warning("RCON 客户端未连接，无法获取在线玩家列表");
+                return new List<PlayerData>();
+            }
+
+            // 执行 list 命令获取在线玩家
+            var listResult = await _rconClient.ExecuteCommandAsync("list");
+            var playerNames = ParsePlayerList(listResult);
+
+            if (!playerNames.Any())
+            {
+                _logger.Debug("当前没有在线玩家");
+                return new List<PlayerData>();
+            }
+
+            // 通过 usercache.json 将玩家名转换为 UUID
+            var playerDataList = new List<PlayerData>();
+            foreach (var playerName in playerNames)
+            {
+                try
+                {
+                    var playerUuid = await GetPlayerUuidFromNameAsync(playerName);
+                    if (playerUuid != Guid.Empty)
+                    {
+                        var playerData = await ReadPlayerDataAsync(playerUuid);
+                        if (playerData != null)
+                        {
+                            playerDataList.Add(playerData);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"读取在线玩家数据失败: {playerName}, {ex.Message}");
+                }
+            }
+
+            return playerDataList;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("获取在线玩家列表失败", ex);
+            return new List<PlayerData>();
+        }
+    }
+
     public List<PlayerData> GetOnlinePlayers()
     {
-        // TODO: 通过 SMP 或 RCON 获取在线玩家列表，然后读取数据
-        // 目前返回空列表
-        _logger.Warning("GetOnlinePlayers 功能尚未完全实现，需要与 SMP/RCON 集成");
-        return new List<PlayerData>();
+        // 同步版本包装异步方法
+        return GetOnlinePlayersAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// 解析玩家列表
+    /// </summary>
+    private List<string> ParsePlayerList(string listResult)
+    {
+        var players = new List<string>();
+
+        try
+        {
+            // 解析 "There are X of a max of Y players online: player1, player2, player3"
+            var match = Regex.Match(listResult, @"online:\s*(.+)$", RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                var playerNames = match.Groups[1].Value.Split(',')
+                    .Select(p => p.Trim())
+                    .Where(p => !string.IsNullOrEmpty(p));
+                players.AddRange(playerNames);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("解析玩家列表失败", ex);
+        }
+
+        return players;
+    }
+
+    /// <summary>
+    /// 从玩家名获取 UUID（通过 usercache.json）
+    /// </summary>
+    private async Task<Guid> GetPlayerUuidFromNameAsync(string playerName)
+    {
+        try
+        {
+            var usercachePath = Path.Combine(_serverDirectory, "usercache.json");
+            if (!File.Exists(usercachePath))
+            {
+                _logger.Debug($"usercache.json 不存在，无法获取玩家 UUID: {playerName}");
+                return Guid.Empty;
+            }
+
+            var json = await File.ReadAllTextAsync(usercachePath);
+            var entries = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, System.Text.Json.JsonElement>>>(json);
+
+            if (entries == null)
+                return Guid.Empty;
+
+            var entry = entries.FirstOrDefault(e =>
+                e.TryGetValue("name", out var nameElement) &&
+                nameElement.GetString()?.Equals(playerName, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (entry != null && entry.TryGetValue("uuid", out var uuidElement))
+            {
+                var uuidString = uuidElement.GetString()?.Replace("-", "");
+                if (Guid.TryParse(uuidString, out var uuid))
+                {
+                    return uuid;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"从名称获取玩家 UUID 失败: {playerName}", ex);
+        }
+
+        return Guid.Empty;
     }
 
     public bool PlayerDataExists(Guid playerUuid)

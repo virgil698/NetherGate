@@ -209,6 +209,19 @@ public static class ServiceCollectionExtensions
             new PlayerDataReader(workingDir, sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("PlayerData")));
         services.AddSingleton<IPlayerDataReader>(sp => sp.GetRequiredService<PlayerDataReader>());
         
+        // 玩家档案 API（需要 RCON）
+        services.AddSingleton<IPlayerProfileApi>(sp =>
+            new PlayerProfileApi(
+                sp.GetService<IRconClient>(),
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("PlayerProfile")));
+        
+        // 标签系统 API
+        services.AddSingleton<ITagApi>(sp =>
+            new TagApi(
+                workingDir,
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("TagApi"),
+                sp.GetService<IRconClient>()));
+        
         services.AddSingleton<INbtDataWriter>(sp =>
             new NbtDataWriter(workingDir, sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("NbtWriter")));
         
@@ -229,7 +242,8 @@ public static class ServiceCollectionExtensions
             new ItemComponentConverter(
                 sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("ItemConverter"),
                 sp.GetRequiredService<ItemComponentReader>(),
-                sp.GetRequiredService<PlayerDataReader>()));
+                sp.GetRequiredService<PlayerDataReader>(),
+                sp.GetRequiredService<IPlayerProfileApi>()));
         
         services.AddSingleton<WorldDataReader>(sp =>
             new WorldDataReader(workingDir, sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("WorldData")));

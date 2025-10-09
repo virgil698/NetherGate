@@ -104,7 +104,10 @@ public class HealthService : IDisposable
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) 
+                { 
+                    _logger.Debug($"获取玩家数量失败: {ex.Message}"); 
+                }
 
                 var ev = new SystemHealthEvent
                 {
@@ -127,13 +130,27 @@ public class HealthService : IDisposable
                 _logger.Warning($"发布健康状态失败: {ex.Message}");
             }
 
-            try { await Task.Delay(_interval, token); } catch { }
+            try 
+            { 
+                await Task.Delay(_interval, token); 
+            } 
+            catch (OperationCanceledException) 
+            { 
+                // 正常取消，无需记录
+            }
         }
     }
 
     public void Dispose()
     {
-        try { StopAsync().Wait(); } catch { }
+        try 
+        { 
+            StopAsync().Wait(); 
+        } 
+        catch (Exception ex) 
+        { 
+            _logger.Debug($"Dispose 时停止 HealthService 失败: {ex.Message}"); 
+        }
     }
 
     private Task OnServerReady(ServerReadyEvent e)

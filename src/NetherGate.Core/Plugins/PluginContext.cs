@@ -1,8 +1,10 @@
+using NetherGate.API.Analytics;
 using NetherGate.API.Audio;
 using NetherGate.API.Data;
 using NetherGate.API.Events;
 using NetherGate.API.FileSystem;
 using NetherGate.API.GameDisplay;
+using NetherGate.API.Leaderboard;
 using NetherGate.API.Logging;
 using NetherGate.API.Localization;
 using NetherGate.API.Monitoring;
@@ -11,7 +13,9 @@ using NetherGate.API.Permissions;
 using NetherGate.API.Plugins;
 using NetherGate.API.Protocol;
 using NetherGate.API.Scheduling;
+using NetherGate.API.Scoreboard;
 using NetherGate.API.Utilities;
+using NetherGate.API.WebSocket;
 
 namespace NetherGate.Core.Plugins;
 
@@ -32,6 +36,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly IBackupManager _backupManager;
     private readonly IPerformanceMonitor _performanceMonitor;
     private readonly IPlayerDataReader _playerDataReader;
+    private readonly IPlayerProfileApi? _playerProfileApi;
+    private readonly ITagApi _tagApi;
+    private readonly IScoreboardApi _scoreboardApi;
     private readonly IWorldDataReader _worldDataReader;
     private readonly INbtDataWriter _nbtDataWriter;
     private readonly IItemComponentReader _itemComponentReader;
@@ -48,6 +55,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     private readonly IGameUtilities? _gameUtilities;
     private readonly IMusicPlayer _musicPlayer;
     private readonly IPermissionManager _permissionManager;
+    private readonly IAdvancementTracker? _advancementTracker;
+    private readonly IStatisticsTracker? _statisticsTracker;
+    private readonly ILeaderboardSystem? _leaderboardSystem;
+    private readonly IDataBroadcaster? _dataBroadcaster;
 
     public PluginInfo PluginInfo { get; }
     public string DataDirectory { get; }
@@ -65,6 +76,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     public IBackupManager BackupManager => _backupManager;
     public IPerformanceMonitor PerformanceMonitor => _performanceMonitor;
     public IPlayerDataReader PlayerDataReader => _playerDataReader;
+    public IPlayerProfileApi PlayerProfileApi => _playerProfileApi ?? throw new InvalidOperationException("RCON 未启用，无法使用玩家档案 API");
+    public ITagApi TagApi => _tagApi;
+    public IScoreboardApi ScoreboardApi => _scoreboardApi;
     public IWorldDataReader WorldDataReader => _worldDataReader;
     public INbtDataWriter NbtDataWriter => _nbtDataWriter;
     public IItemComponentReader ItemComponentReader => _itemComponentReader;
@@ -80,6 +94,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
     public IGameUtilities GameUtilities => _gameUtilities ?? throw new InvalidOperationException("RCON 未启用，无法使用游戏实用工具");
     public IMusicPlayer MusicPlayer => _musicPlayer;
     public IPermissionManager PermissionManager => _permissionManager;
+    public IAdvancementTracker AdvancementTracker => _advancementTracker ?? throw new NotImplementedException("成就追踪器尚未初始化");
+    public IStatisticsTracker StatisticsTracker => _statisticsTracker ?? throw new NotImplementedException("统计追踪器尚未初始化");
+    public ILeaderboardSystem LeaderboardSystem => _leaderboardSystem ?? throw new NotImplementedException("排行榜系统尚未初始化");
+    public IDataBroadcaster DataBroadcaster => _dataBroadcaster ?? throw new NotImplementedException("数据广播器尚未初始化");
     
     // 待实现的功能
     public IServerQuery ServerQuery => throw new NotImplementedException("服务器查询功能将在后续版本实现（基于 MC 网络协议）");
@@ -102,6 +120,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         IBackupManager backupManager,
         IPerformanceMonitor performanceMonitor,
         IPlayerDataReader playerDataReader,
+        IPlayerProfileApi? playerProfileApi,
+        ITagApi tagApi,
+        IScoreboardApi scoreboardApi,
         IWorldDataReader worldDataReader,
         INbtDataWriter nbtDataWriter,
         IItemComponentReader itemComponentReader,
@@ -114,7 +135,11 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         IBlockDataWriter? blockDataWriter,
         IGameUtilities? gameUtilities,
         IMusicPlayer musicPlayer,
-        IPermissionManager permissionManager)
+        IPermissionManager permissionManager,
+        IAdvancementTracker? advancementTracker = null,
+        IStatisticsTracker? statisticsTracker = null,
+        ILeaderboardSystem? leaderboardSystem = null,
+        IDataBroadcaster? dataBroadcaster = null)
     {
         _pluginManager = pluginManager;
         _eventBus = eventBus;
@@ -126,6 +151,9 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         _backupManager = backupManager;
         _performanceMonitor = performanceMonitor;
         _playerDataReader = playerDataReader;
+        _playerProfileApi = playerProfileApi;
+        _tagApi = tagApi;
+        _scoreboardApi = scoreboardApi;
         _worldDataReader = worldDataReader;
         _nbtDataWriter = nbtDataWriter;
         _itemComponentReader = itemComponentReader;
@@ -139,6 +167,10 @@ internal class PluginContext : IPluginContext, IPluginContextInternal
         _gameUtilities = gameUtilities;
         _musicPlayer = musicPlayer;
         _permissionManager = permissionManager;
+        _advancementTracker = advancementTracker;
+        _statisticsTracker = statisticsTracker;
+        _leaderboardSystem = leaderboardSystem;
+        _dataBroadcaster = dataBroadcaster;
 
         PluginInfo = container.Metadata.ToPluginInfo();
         DataDirectory = container.DataDirectory;

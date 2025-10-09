@@ -160,8 +160,8 @@ public class GameUtilities : IGameUtilities
 
     public async Task PlayNoteAsync(string targets, Note note, Instrument instrument = Instrument.Piano, Position? pos = null)
     {
-        var soundId = GetInstrumentSound(instrument);
-        var pitch = GetNotePitch(note);
+        var soundId = NoteUtils.GetInstrumentSound(instrument);
+        var pitch = NoteUtils.GetNotePitch(note);
         await _gameDisplayApi.PlaySoundAsync(soundId, "record", targets, pos?.X, pos?.Y, pos?.Z, 1.0, pitch);
     }
 
@@ -179,7 +179,7 @@ public class GameUtilities : IGameUtilities
 
     public async Task PlayPredefinedMelodyAsync(string targets, PredefinedMelody melody, Position? pos = null)
     {
-        var notes = GetPredefinedMelody(melody);
+        var notes = NoteUtils.GetPredefinedMelody(melody);
         await PlayMelodyAsync(targets, notes, Instrument.Piano, pos);
     }
 
@@ -486,71 +486,6 @@ public class GameUtilities : IGameUtilities
         };
     }
 
-    private string GetInstrumentSound(Instrument instrument)
-    {
-        return instrument switch
-        {
-            Instrument.Piano => "minecraft:block.note_block.harp",
-            Instrument.Bass => "minecraft:block.note_block.bass",
-            Instrument.BaseDrum => "minecraft:block.note_block.basedrum",
-            Instrument.Snare => "minecraft:block.note_block.snare",
-            Instrument.Hat => "minecraft:block.note_block.hat",
-            Instrument.Guitar => "minecraft:block.note_block.guitar",
-            Instrument.Flute => "minecraft:block.note_block.flute",
-            Instrument.Bell => "minecraft:block.note_block.bell",
-            Instrument.Chime => "minecraft:block.note_block.chime",
-            Instrument.Xylophone => "minecraft:block.note_block.xylophone",
-            Instrument.IronXylophone => "minecraft:block.note_block.iron_xylophone",
-            Instrument.CowBell => "minecraft:block.note_block.cow_bell",
-            Instrument.Didgeridoo => "minecraft:block.note_block.didgeridoo",
-            Instrument.Bit => "minecraft:block.note_block.bit",
-            Instrument.Banjo => "minecraft:block.note_block.banjo",
-            Instrument.Pling => "minecraft:block.note_block.pling",
-            _ => "minecraft:block.note_block.harp"
-        };
-    }
-
-    private double GetNotePitch(Note note)
-    {
-        // Minecraft 音符盒音调计算：pitch = 2^((note-12)/12)
-        var noteValue = (int)note;
-        return Math.Pow(2, (noteValue - 12) / 12.0);
-    }
-
-    private List<(Note note, int delayMs)> GetPredefinedMelody(PredefinedMelody melody)
-    {
-        return melody switch
-        {
-            PredefinedMelody.Victory => new List<(Note, int)>
-            {
-                (Note.C, 200), (Note.E, 200), (Note.G, 200), (Note.CHigh, 400)
-            },
-            PredefinedMelody.Defeat => new List<(Note, int)>
-            {
-                (Note.CHigh, 200), (Note.G, 200), (Note.E, 200), (Note.C, 400)
-            },
-            PredefinedMelody.Welcome => new List<(Note, int)>
-            {
-                (Note.C, 150), (Note.D, 150), (Note.E, 150), (Note.F, 150), (Note.G, 300)
-            },
-            PredefinedMelody.Notification => new List<(Note, int)>
-            {
-                (Note.G, 100), (Note.CHigh, 200)
-            },
-            PredefinedMelody.Warning => new List<(Note, int)>
-            {
-                (Note.E, 150), (Note.E, 150), (Note.E, 300)
-            },
-            PredefinedMelody.Error => new List<(Note, int)>
-            {
-                (Note.G, 100), (Note.F, 100), (Note.E, 200)
-            },
-            PredefinedMelody.Success => new List<(Note, int)>
-            {
-                (Note.E, 100), (Note.G, 100), (Note.CHigh, 200)
-            },
-            _ => new List<(Note, int)>()
-        };
-    }
+    // 音符转换功能已移至 NoteUtils 工具类
 }
 

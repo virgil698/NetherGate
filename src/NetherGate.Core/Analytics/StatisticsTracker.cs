@@ -16,6 +16,8 @@ public class StatisticsTracker : IStatisticsTracker
     private readonly IFileWatcher _fileWatcher;
     private readonly ConcurrentDictionary<string, PlayerStatistics> _cache = new();
     private bool _isTracking;
+    private int? _cachedTotalBlockCount;
+    private HashSet<string>? _cachedAllBlocks;
 
     public event EventHandler<StatisticsUpdatedEventArgs>? StatisticsUpdated;
 
@@ -154,11 +156,11 @@ public class StatisticsTracker : IStatisticsTracker
         return progress;
     }
 
-    public async Task StartTrackingAsync()
+    public Task StartTrackingAsync()
     {
         if (_isTracking)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         _isTracking = true;
@@ -170,16 +172,17 @@ public class StatisticsTracker : IStatisticsTracker
         }
 
         // 监听统计文件变化
-        _fileWatcher.Watch(statsDir, "*.json", async (filePath, changeType) =>
+        _fileWatcher.WatchDirectory(statsDir, "*.json", false, e =>
         {
-            if (changeType == WatcherChangeTypes.Changed || changeType == WatcherChangeTypes.Created)
+            if (e.ChangeType == FileChangeType.Modified || e.ChangeType == FileChangeType.Created)
             {
-                var playerUuid = Path.GetFileNameWithoutExtension(filePath);
-                await OnStatisticsFileChanged(playerUuid, filePath);
+                var playerUuid = Path.GetFileNameWithoutExtension(e.FilePath);
+                _ = OnStatisticsFileChanged(playerUuid, e.FilePath);
             }
         });
 
         _logger.Info("Statistics tracking started");
+        return Task.CompletedTask;
     }
 
     public Task StopTrackingAsync()
@@ -325,28 +328,138 @@ public class StatisticsTracker : IStatisticsTracker
 
     private int GetTotalBlockCount()
     {
-        // Minecraft 1.21 有约 1000+ 个方块
-        return 1200;
+        if (_cachedTotalBlockCount.HasValue)
+            return _cachedTotalBlockCount.Value;
+
+        var allBlocks = GetAllBlocks();
+        _cachedTotalBlockCount = allBlocks.Count;
+        return _cachedTotalBlockCount.Value;
     }
 
     private bool IsCollectableBlock(string blockId)
     {
         // 检查是否是可收集的方块
         // 排除空气、虚空等不可收集的方块
-        return !blockId.Contains("air") && !blockId.Contains("void");
+        if (blockId.Contains("air") || blockId.Contains("void") || blockId.Contains("barrier"))
+            return false;
+
+        // 检查是否在已知方块列表中
+        var allBlocks = GetAllBlocks();
+        return allBlocks.Contains(blockId);
     }
 
     private HashSet<string> GetAllBlocks()
     {
-        // 应该从资源文件或数据包加载所有方块列表
-        // 这里返回一个示例列表
+        // 使用缓存
+        if (_cachedAllBlocks != null)
+            return _cachedAllBlocks;
+
+        var blocks = new HashSet<string>();
+
+        try
+        {
+            var serverDirectory = Path.GetFullPath(Path.Combine(_worldPath, ".."));
+            
+            // 方法1：从方块战利品表加载（最可靠的方法）
+            var lootTablesPath = Path.Combine(serverDirectory, "data", "minecraft", "loot_tables", "blocks");
+            if (Directory.Exists(lootTablesPath))
+            {
+                var lootTableFiles = Directory.GetFiles(lootTablesPath, "*.json", SearchOption.AllDirectories);
+                foreach (var file in lootTableFiles)
+                {
+                    var relativePath = Path.GetRelativePath(lootTablesPath, file);
+                    var blockId = "minecraft:" + Path.ChangeExtension(relativePath, null).Replace('\\', '/');
+                    blocks.Add(blockId);
+                }
+                
+                _logger.Debug($"从战利品表加载了 {blocks.Count} 个方块");
+            }
+
+            // 方法2：从方块标签补充（可能包含更多方块）
+            var blockTagsPath = Path.Combine(serverDirectory, "data", "minecraft", "tags", "blocks");
+            if (Directory.Exists(blockTagsPath))
+            {
+                try
+                {
+                    // 读取 mineable 标签组
+                    var mineableCategories = new[] { "pickaxe", "axe", "shovel", "hoe" };
+                    foreach (var category in mineableCategories)
+                    {
+                        var tagFile = Path.Combine(blockTagsPath, "mineable", $"{category}.json");
+                        if (File.Exists(tagFile))
+                        {
+                            var json = File.ReadAllText(tagFile);
+                            var tag = JsonSerializer.Deserialize<TagDefinition>(json);
+                            if (tag?.Values != null)
+                            {
+                                foreach (var value in tag.Values)
+                                {
+                                    if (!value.StartsWith("#")) // 忽略标签引用
+                                    {
+                                        blocks.Add(value.Contains(":") ? value : $"minecraft:{value}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    _logger.Debug($"从方块标签补充后共 {blocks.Count} 个方块");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"从方块标签加载失败: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"动态加载方块列表失败: {ex.Message}");
+        }
+
+        // 如果加载失败或数量太少，使用默认的常见方块列表
+        if (blocks.Count < 100)
+        {
+            _logger.Warning($"动态加载的方块数量过少({blocks.Count})，使用默认列表");
+            blocks = GetDefaultBlocks();
+        }
+
+        _cachedAllBlocks = blocks;
+        return blocks;
+    }
+
+    private HashSet<string> GetDefaultBlocks()
+    {
+        // 默认的常见方块列表（作为降级方案）
         return new HashSet<string>
         {
-            "minecraft:stone",
-            "minecraft:dirt",
-            "minecraft:grass_block",
-            // ... 更多方块
+            "minecraft:stone", "minecraft:granite", "minecraft:polished_granite",
+            "minecraft:diorite", "minecraft:polished_diorite", "minecraft:andesite",
+            "minecraft:polished_andesite", "minecraft:deepslate", "minecraft:cobbled_deepslate",
+            "minecraft:grass_block", "minecraft:dirt", "minecraft:coarse_dirt",
+            "minecraft:podzol", "minecraft:rooted_dirt", "minecraft:mud",
+            "minecraft:cobblestone", "minecraft:oak_planks", "minecraft:spruce_planks",
+            "minecraft:birch_planks", "minecraft:jungle_planks", "minecraft:acacia_planks",
+            "minecraft:dark_oak_planks", "minecraft:mangrove_planks", "minecraft:cherry_planks",
+            "minecraft:bedrock", "minecraft:sand", "minecraft:red_sand",
+            "minecraft:gravel", "minecraft:coal_ore", "minecraft:deepslate_coal_ore",
+            "minecraft:iron_ore", "minecraft:deepslate_iron_ore", "minecraft:copper_ore",
+            "minecraft:deepslate_copper_ore", "minecraft:gold_ore", "minecraft:deepslate_gold_ore",
+            "minecraft:redstone_ore", "minecraft:deepslate_redstone_ore",
+            "minecraft:emerald_ore", "minecraft:deepslate_emerald_ore",
+            "minecraft:lapis_ore", "minecraft:deepslate_lapis_ore",
+            "minecraft:diamond_ore", "minecraft:deepslate_diamond_ore",
+            "minecraft:nether_gold_ore", "minecraft:nether_quartz_ore"
+            // 总计1200+方块（这里简化为默认值）
         };
+    }
+
+    /// <summary>
+    /// 标签定义（用于JSON反序列化）
+    /// </summary>
+    private class TagDefinition
+    {
+        public List<string>? Values { get; set; }
+        public bool Replace { get; set; }
     }
 }
 

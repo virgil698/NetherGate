@@ -12,6 +12,7 @@ using NetherGate.API.Network;
 using NetherGate.API.Permissions;
 using NetherGate.API.Protocol;
 using NetherGate.API.Scheduling;
+using NetherGate.API.Scoreboard;
 using NetherGate.API.Utilities;
 using NetherGate.API.WebSocket;
 
@@ -105,6 +106,27 @@ public interface IPluginContext
     /// 用于读取玩家 NBT 数据
     /// </summary>
     IPlayerDataReader PlayerDataReader { get; }
+
+    /// <summary>
+    /// 玩家档案 API
+    /// 用于获取玩家档案信息（UUID、皮肤、头像等）
+    /// 基于 Minecraft 1.21.9+ 的 /fetchprofile 命令
+    /// ⚠️ 需要 RCON 支持
+    /// </summary>
+    IPlayerProfileApi PlayerProfileApi { get; }
+
+    /// <summary>
+    /// 标签系统 API
+    /// 用于查询 Minecraft 的方块/物品/实体标签（Minecraft 1.21.9+）
+    /// </summary>
+    ITagApi TagApi { get; }
+
+    /// <summary>
+    /// 计分板系统 API
+    /// 用于管理计分板目标、分数和队伍
+    /// 完全基于 RCON /scoreboard 命令实现
+    /// </summary>
+    IScoreboardApi ScoreboardApi { get; }
 
     /// <summary>
     /// 世界数据读取器

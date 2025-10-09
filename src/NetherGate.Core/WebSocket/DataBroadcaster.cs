@@ -75,7 +75,7 @@ public class DataBroadcaster : IDataBroadcaster
         await SendToWebSocketAsync(client.WebSocket, bytes);
     }
 
-    public async Task RegisterDataSourceAsync<T>(string channel, Func<Task<T>> dataProvider, TimeSpan interval)
+    public Task RegisterDataSourceAsync<T>(string channel, Func<Task<T>> dataProvider, TimeSpan interval)
     {
         if (_dataSources.ContainsKey(channel))
         {
@@ -116,6 +116,7 @@ public class DataBroadcaster : IDataBroadcaster
         }, cts.Token);
 
         _logger.Info($"Registered data source for channel '{channel}' with interval {interval.TotalSeconds}s");
+        return Task.CompletedTask;
     }
 
     public Task UnregisterDataSourceAsync(string channel)
@@ -139,7 +140,7 @@ public class DataBroadcaster : IDataBroadcaster
         return _channels.Keys.ToList();
     }
 
-    public async Task AddClientAsync(System.Net.WebSockets.WebSocket webSocket, string channel, string? ipAddress = null)
+    public Task AddClientAsync(System.Net.WebSockets.WebSocket webSocket, string channel, string? ipAddress = null)
     {
         var clientId = Guid.NewGuid().ToString();
         var client = new WebSocketClient
@@ -179,12 +180,17 @@ public class DataBroadcaster : IDataBroadcaster
                     await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.Debug($"WebSocket 接收循环异常 (客户端 {clientId}): {ex.Message}");
+            }
             finally
             {
                 await RemoveClientAsync(clientId, "Connection closed");
             }
         });
+        
+        return Task.CompletedTask;
     }
 
     public async Task RemoveClientAsync(string clientId, string? reason = null)

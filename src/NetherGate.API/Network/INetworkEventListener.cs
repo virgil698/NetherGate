@@ -123,11 +123,22 @@ public interface INetworkEventHandler
 /// </summary>
 public record PlayerConnectionData
 {
+    /// <summary>IP 地址</summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>端口号</summary>
     public int Port { get; init; }
+    
+    /// <summary>协议版本</summary>
     public int ProtocolVersion { get; init; }
+    
+    /// <summary>服务器地址</summary>
     public string ServerAddress { get; init; } = string.Empty;
+    
+    /// <summary>下一状态</summary>
     public int NextState { get; init; }
+    
+    /// <summary>时间戳</summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
 
@@ -136,9 +147,16 @@ public record PlayerConnectionData
 /// </summary>
 public record PlayerLoginData
 {
+    /// <summary>玩家名称</summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>玩家 UUID</summary>
     public Guid? PlayerUuid { get; init; }
+    
+    /// <summary>IP 地址</summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>时间戳</summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
 
@@ -147,9 +165,16 @@ public record PlayerLoginData
 /// </summary>
 public record PlayerLoginFailureData
 {
+    /// <summary>玩家名称</summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>失败原因</summary>
     public string Reason { get; init; } = string.Empty;
+    
+    /// <summary>IP 地址</summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>时间戳</summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
 
@@ -158,10 +183,19 @@ public record PlayerLoginFailureData
 /// </summary>
 public record PlayerDisconnectData
 {
+    /// <summary>玩家名称</summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>玩家 UUID</summary>
     public Guid? PlayerUuid { get; init; }
+    
+    /// <summary>断开原因</summary>
     public string Reason { get; init; } = string.Empty;
+    
+    /// <summary>IP 地址</summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>时间戳</summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
 
@@ -170,12 +204,25 @@ public record PlayerDisconnectData
 /// </summary>
 public record PacketData
 {
+    /// <summary>数据包 ID</summary>
     public int PacketId { get; init; }
+    
+    /// <summary>数据包类型</summary>
     public string PacketType { get; init; } = string.Empty;
+    
+    /// <summary>数据长度</summary>
     public int DataLength { get; init; }
+    
+    /// <summary>玩家名称</summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>玩家 UUID</summary>
     public Guid? PlayerUuid { get; init; }
+    
+    /// <summary>原始数据</summary>
     public byte[]? RawData { get; init; }
+    
+    /// <summary>时间戳</summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
 
@@ -184,11 +231,22 @@ public record PacketData
 /// </summary>
 public record NetworkExceptionData
 {
+    /// <summary>玩家名称</summary>
     public string PlayerName { get; init; } = string.Empty;
+    
+    /// <summary>IP 地址</summary>
     public string IpAddress { get; init; } = string.Empty;
+    
+    /// <summary>异常类型</summary>
     public string ExceptionType { get; init; } = string.Empty;
+    
+    /// <summary>异常消息</summary>
     public string Message { get; init; } = string.Empty;
+    
+    /// <summary>堆栈跟踪</summary>
     public string? StackTrace { get; init; }
+    
+    /// <summary>时间戳</summary>
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
 
