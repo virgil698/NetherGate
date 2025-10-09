@@ -7,7 +7,6 @@
 [![.NET Version](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dot.net)
 [![Minecraft](https://img.shields.io/badge/Minecraft-Java%201.21.9+-brightgreen?logo=minecraft)](https://minecraft.net)
 [![License](https://img.shields.io/badge/License-LGPL--3.0-blue.svg)](LICENSE)
-[![Coverage](https://img.shields.io/badge/Coverage-100%25-success)](docs/功能覆盖率报告.md)
 
 简体中文 | [English](README_EN.md)
 
@@ -46,8 +45,6 @@ NetherGate 让插件开发变得**简单而强大**：
 | **统计分析** | ✅ 100% | 游戏统计/方块收集进度 |
 | **排行榜系统** | ✅ 100% | 灵活的排行榜管理 |
 | **数据推送** | ✅ 100% | WebSocket 实时数据广播 |
-
-**详细报告：** [功能覆盖率文档](docs/功能覆盖率报告.md)
 
 ### **💡 核心优势**
 
@@ -450,6 +447,6 @@ await context.GameUtilities.CreateSequence()
 
 Made with ❤️ by NetherGate Team
 
-[功能覆盖率](docs/功能覆盖率报告.md) • [文档中心](docs/README.md) • [API 参考](docs/08-参考/API参考.md)
+[文档中心](docs/README.md) • [API 参考](docs/08-参考/API参考.md) • [快速开始](docs/01-快速开始/安装和配置.md)
 
 </div>

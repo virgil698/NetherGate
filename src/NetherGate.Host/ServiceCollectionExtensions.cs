@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using NetherGate.API.Configuration;
 using NetherGate.API.Events;
 using NetherGate.API.Logging;
@@ -30,6 +29,11 @@ using NetherGate.API.Leaderboard;
 using NetherGate.Core.Leaderboard;
 using NetherGate.API.Analytics;
 using NetherGate.Core.Analytics;
+using NetherGate.API.Plugins;
+
+// 命名空间别名，避免冲突
+using ApiLogLevel = NetherGate.API.Logging.LogLevel;
+using ApiLoggerFactory = NetherGate.API.Logging.ILoggerFactory;
 
 namespace NetherGate.Host;
 
@@ -95,9 +99,9 @@ public static class ServiceCollectionExtensions
     {
         var writers = new List<ILogWriter>();
         
-        var minLevel = Enum.TryParse<LogLevel>(config.Level, true, out var level)
+        var minLevel = Enum.TryParse<ApiLogLevel>(config.Level, true, out var level)
             ? level
-            : LogLevel.Info;
+            : ApiLogLevel.Info;
 
         if (config.Console.Enabled)
         {
@@ -113,9 +117,9 @@ public static class ServiceCollectionExtensions
             ));
         }
 
-        var loggerFactory = new LoggerFactory(minLevel, writers);
-        services.AddSingleton<ILoggerFactory>(loggerFactory);
-        services.AddSingleton(sp => sp.GetRequiredService<ILoggerFactory>().CreateLogger("NetherGate"));
+        var loggerFactory = new Core.Logging.LoggerFactory(minLevel, writers);
+        services.AddSingleton<ApiLoggerFactory>(loggerFactory);
+        services.AddSingleton(sp => sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("NetherGate"));
         
         return services;
     }
@@ -131,7 +135,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SmpClient>(sp => 
             new SmpClient(
                 config.ServerConnection,
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("SMP"),
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("SMP"),
                 sp.GetRequiredService<IEventBus>()
             ));
         services.AddSingleton<ISmpApi>(sp => sp.GetRequiredService<SmpClient>());
@@ -148,7 +152,7 @@ public static class ServiceCollectionExtensions
                     config.Rcon.Port,
                     config.Rcon.Password,
                     config.Rcon.ConnectTimeout,
-                    sp.GetRequiredService<ILoggerFactory>().CreateLogger("RCON")
+                    sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("RCON")
                 ));
             services.AddSingleton<IRconClient>(sp => sp.GetRequiredService<RconClient>());
             services.AddSingleton<RconService>();
@@ -201,53 +205,67 @@ public static class ServiceCollectionExtensions
     {
         var workingDir = config.ServerProcess.Server.WorkingDirectory;
         
-        services.AddSingleton<IPlayerDataReader>(sp =>
-            new PlayerDataReader(workingDir, sp.GetRequiredService<ILoggerFactory>().CreateLogger("PlayerData")));
-        
-        services.AddSingleton<IWorldDataReader>(sp =>
-            new WorldDataReader(workingDir, sp.GetRequiredService<ILoggerFactory>().CreateLogger("WorldData")));
+        services.AddSingleton<PlayerDataReader>(sp =>
+            new PlayerDataReader(workingDir, sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("PlayerData")));
+        services.AddSingleton<IPlayerDataReader>(sp => sp.GetRequiredService<PlayerDataReader>());
         
         services.AddSingleton<INbtDataWriter>(sp =>
-            new NbtDataWriter(workingDir, sp.GetRequiredService<ILoggerFactory>().CreateLogger("NbtWriter")));
+            new NbtDataWriter(workingDir, sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("NbtWriter")));
         
-        services.AddSingleton<IItemComponentReader>(sp =>
+        services.AddSingleton<ItemComponentReader>(sp =>
             new ItemComponentReader(
                 workingDir,
                 sp.GetRequiredService<IRconClient>(),
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("ItemReader")));
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("ItemReader")));
+        services.AddSingleton<IItemComponentReader>(sp => sp.GetRequiredService<ItemComponentReader>());
         
         services.AddSingleton<IItemComponentWriter>(sp =>
             new ItemComponentWriter(
                 sp.GetRequiredService<IRconClient>(),
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("ItemWriter")));
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("ItemWriter"),
+                sp.GetRequiredService<ItemComponentReader>()));
         
-        services.AddSingleton<IItemComponentConverter, ItemComponentConverter>();
+        services.AddSingleton<IItemComponentConverter>(sp =>
+            new ItemComponentConverter(
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("ItemConverter"),
+                sp.GetRequiredService<ItemComponentReader>(),
+                sp.GetRequiredService<PlayerDataReader>()));
         
-        services.AddSingleton<IBlockDataReader>(sp =>
+        services.AddSingleton<WorldDataReader>(sp =>
+            new WorldDataReader(workingDir, sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("WorldData")));
+        services.AddSingleton<IWorldDataReader>(sp => sp.GetRequiredService<WorldDataReader>());
+        
+        services.AddSingleton<BlockDataReader>(sp =>
             new BlockDataReader(
                 workingDir,
-                sp.GetRequiredService<IRconClient>(),
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("BlockReader")));
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("BlockReader"),
+                sp.GetRequiredService<WorldDataReader>()));
+        services.AddSingleton<IBlockDataReader>(sp => sp.GetRequiredService<BlockDataReader>());
         
         services.AddSingleton<IBlockDataWriter>(sp =>
             new BlockDataWriter(
                 sp.GetRequiredService<IRconClient>(),
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("BlockWriter")));
+                sp.GetRequiredService<BlockDataReader>(),
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("BlockWriter")));
         
         // 成就和统计追踪
         services.AddSingleton<IAdvancementTracker>(sp =>
             new AdvancementTracker(
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("Advancement"),
                 workingDir,
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("Advancement")));
+                sp.GetRequiredService<IFileWatcher>()));
         
         services.AddSingleton<IStatisticsTracker>(sp =>
             new StatisticsTracker(
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("Statistics"),
                 workingDir,
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("Statistics")));
+                sp.GetRequiredService<IFileWatcher>()));
         
         // 排行榜系统
         services.AddSingleton<ILeaderboardSystem>(sp =>
-            new LeaderboardSystem(sp.GetRequiredService<ILoggerFactory>().CreateLogger("Leaderboard")));
+            new LeaderboardSystem(
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("Leaderboard"),
+                Path.Combine(workingDir, "leaderboards")));
         
         return services;
     }
@@ -262,16 +280,18 @@ public static class ServiceCollectionExtensions
         var workingDir = config.ServerProcess.Server.WorkingDirectory;
         
         services.AddSingleton<IFileWatcher>(sp =>
-            new FileWatcher(sp.GetRequiredService<ILoggerFactory>().CreateLogger("FileWatcher")));
+            new FileWatcher(
+                workingDir,
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("FileWatcher")));
         
         services.AddSingleton<IServerFileAccess>(sp =>
-            new ServerFileAccess(workingDir, sp.GetRequiredService<ILoggerFactory>().CreateLogger("FileAccess")));
+            new ServerFileAccess(workingDir, sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("FileAccess")));
         
         services.AddSingleton<IBackupManager>(sp =>
             new BackupManager(
                 workingDir,
-                Path.Combine(workingDir, "backups"),
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("Backup")));
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("Backup"),
+                Path.Combine(workingDir, "backups")));
         
         return services;
     }
@@ -302,7 +322,7 @@ public static class ServiceCollectionExtensions
                 new SparkAgentManager(
                     config.Spark,
                     config.ServerProcess.Server.WorkingDirectory,
-                    sp.GetRequiredService<ILoggerFactory>().CreateLogger("SparkAgent")));
+                    sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("SparkAgent")));
         }
         
         // 服务器进程管理
@@ -325,7 +345,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGameDisplayApi, GameDisplayApi>();
         services.AddSingleton<IGameUtilities, GameUtilities>();
         services.AddSingleton<IMusicPlayer, MusicPlayer>();
-        services.AddSingleton<INetworkEventListener, NetworkEventListener>();
         
         return services;
     }
@@ -340,20 +359,20 @@ public static class ServiceCollectionExtensions
         // 分布式插件总线
         services.AddSingleton<DistributedPluginBus>(sp =>
             new DistributedPluginBus(
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("DistributedBus"),
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("DistributedBus"),
                 sp.GetService<WebSocketServer>()
             ));
         
         // 连接管理器
         services.AddSingleton<NetherGate.Core.Network.ConnectionManager>(sp =>
             new NetherGate.Core.Network.ConnectionManager(
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger("ConnMgr")
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("ConnMgr")
             ));
         
         services.AddSingleton<PluginManager>(sp =>
         {
             var pm = new PluginManager(
-                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<ApiLoggerFactory>(),
                 sp.GetRequiredService<IEventBus>(),
                 sp.GetRequiredService<SmpClient>(),
                 sp.GetRequiredService<ICommandManager>(),
