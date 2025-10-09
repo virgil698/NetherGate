@@ -140,11 +140,34 @@ public class PluginMetadata
     public string? License { get; set; }
 
     /// <summary>
+    /// 插件类型
+    /// - "csharp": C# 插件（默认）
+    /// - "python": Python 插件
+    /// </summary>
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "csharp";
+
+    /// <summary>
     /// 主类全名（包含命名空间）
-    /// 例如: "MyPlugin.MyPluginMain"
+    /// - C# 插件: "MyPlugin.MyPluginMain"
+    /// - Python 插件: "main.MyPlugin" (模块.类名)
     /// </summary>
     [JsonPropertyName("main")]
     public string Main { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Python 版本要求（仅用于 Python 插件）
+    /// 例如: "3.8+", "&gt;=3.9,&lt;4.0"
+    /// </summary>
+    [JsonPropertyName("python_version")]
+    public string? PythonVersion { get; set; }
+
+    /// <summary>
+    /// Python 包依赖（仅用于 Python 插件）
+    /// 例如: ["requests>=2.28.0", "pyyaml>=6.0"]
+    /// </summary>
+    [JsonPropertyName("python_dependencies")]
+    public List<string>? PythonDependencies { get; set; }
 
     /// <summary>
     /// 插件分类

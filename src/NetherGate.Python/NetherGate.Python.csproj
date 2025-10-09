@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>NetherGate.Python</RootNamespace>
+    <AssemblyName>NetherGate.Python</AssemblyName>
+    
+    <!-- 包信息 -->
+    <PackageId>NetherGate.Python</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>NetherGate Team</Authors>
+    <Description>Python 插件支持扩展，为 NetherGate 提供 Python 插件桥接能力</Description>
+    <PackageTags>minecraft;server;plugin;python</PackageTags>
+    <RepositoryUrl>https://github.com/your-org/NetherGate</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- NetherGate 依赖 -->
+    <ProjectReference Include="..\NetherGate.API\NetherGate.API.csproj" />
+    <ProjectReference Include="..\NetherGate.Core\NetherGate.Core.csproj" />
+    
+    <!-- Python.NET 依赖 -->
+    <PackageReference Include="pythonnet" Version="3.0.3" />
+    
+    <!-- 依赖注入 -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    
+    <!-- JSON 序列化 -->
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 嵌入 Python SDK 文件 -->
+    <EmbeddedResource Include="PythonSDK\**\*.py" />
+  </ItemGroup>
+
+</Project>
+

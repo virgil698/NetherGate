@@ -131,6 +131,9 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         NetherGateConfig config)
     {
+        // 注册 ServerConnectionConfig（SmpService 需要）
+        services.AddSingleton(config.ServerConnection);
+        
         // SMP 客户端
         services.AddSingleton<SmpClient>(sp => 
             new SmpClient(
@@ -140,7 +143,7 @@ public static class ServiceCollectionExtensions
             ));
         services.AddSingleton<ISmpApi>(sp => sp.GetRequiredService<SmpClient>());
         
-        // SMP 服务
+        // SMP 服务（现在可以注入 ServerConnectionConfig）
         services.AddSingleton<SmpService>();
         
         // RCON 客户端

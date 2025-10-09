@@ -92,14 +92,26 @@ public class PluginLoader
             return null;
         }
 
-        // 2. 查找插件 DLL
-        var pluginName = Path.GetFileName(pluginDirectory);
-        var assemblyPath = Path.Combine(pluginDirectory, $"{pluginName}.dll");
+        string assemblyPath;
 
-        if (!File.Exists(assemblyPath))
+        // 2. 根据插件类型确定程序集路径
+        if (string.Equals(metadata.Type, "python", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.Error($"插件 DLL 不存在: {assemblyPath}");
-            return null;
+            // Python 插件：使用插件目录本身作为"程序集路径"
+            assemblyPath = pluginDirectory;
+            _logger.Debug($"检测到 Python 插件: {metadata.Name}");
+        }
+        else
+        {
+            // C# 插件（默认）：查找 DLL
+            var pluginName = Path.GetFileName(pluginDirectory);
+            assemblyPath = Path.Combine(pluginDirectory, $"{pluginName}.dll");
+
+            if (!File.Exists(assemblyPath))
+            {
+                _logger.Error($"插件 DLL 不存在: {assemblyPath}");
+                return null;
+            }
         }
 
         // 3. 创建插件数据目录
@@ -119,14 +131,22 @@ public class PluginLoader
     /// </summary>
     private PluginMetadata? ScanPluginMetadataFromDirectory(string pluginDirectory)
     {
-        var metadataPath = Path.Combine(pluginDirectory, "plugin.json");
-        if (!File.Exists(metadataPath))
+        // 优先查找 resource/plugin.json（Python 插件标准位置）
+        var resourceMetadataPath = Path.Combine(pluginDirectory, "resource", "plugin.json");
+        if (File.Exists(resourceMetadataPath))
         {
-            _logger.Warning($"插件目录缺少 plugin.json: {pluginDirectory}");
-            return null;
+            return ScanPluginMetadata(resourceMetadataPath);
         }
 
-        return ScanPluginMetadata(metadataPath);
+        // 其次查找根目录的 plugin.json（C# 插件标准位置）
+        var metadataPath = Path.Combine(pluginDirectory, "plugin.json");
+        if (File.Exists(metadataPath))
+        {
+            return ScanPluginMetadata(metadataPath);
+        }
+
+        _logger.Warning($"插件目录缺少 plugin.json: {pluginDirectory}");
+        return null;
     }
 
     /// <summary>
@@ -175,53 +195,173 @@ public class PluginLoader
         {
             _logger.Info($"加载插件: {container.Name}");
 
-            // 1. 创建加载上下文（支持三层依赖解析）
-            var loadContext = new PluginLoadContext(container.AssemblyPath, _globalLibPath, _logger);
-            container.LoadContext = loadContext;
-
-            // 2. 加载程序集
-            container.Assembly = loadContext.LoadFromAssemblyPath(container.AssemblyPath);
-            _logger.Debug($"  程序集已加载: {container.Assembly.FullName}");
-
-            // 3. 查找插件主类
-            var mainClass = container.Assembly.GetType(container.Metadata.Main);
-            if (mainClass == null)
+            // 检查是否是 Python 插件
+            if (string.Equals(container.Metadata.Type, "python", StringComparison.OrdinalIgnoreCase))
             {
-                container.SetError($"找不到主类: {container.Metadata.Main}");
-                _logger.Error($"  {container.Error}");
-                return false;
+                return LoadPythonPlugin(container);
             }
 
-            // 4. 验证主类实现 IPlugin 接口
-            if (!typeof(IPlugin).IsAssignableFrom(mainClass))
-            {
-                container.SetError($"主类未实现 IPlugin 接口: {container.Metadata.Main}");
-                _logger.Error($"  {container.Error}");
-                return false;
-            }
-
-            // 5. 创建插件实例（支持构造函数注入）
-            container.Instance = (IPlugin?)CreatePluginInstance(mainClass);
-            if (container.Instance == null)
-            {
-                container.SetError("无法创建插件实例");
-                _logger.Error($"  {container.Error}");
-                return false;
-            }
-
-            // 6. 更新状态
-            container.State = PluginState.Loaded;
-            container.LoadedAt = DateTime.UtcNow;
-            container.ClearError();
-
-            _logger.Info($"  插件加载成功: {container.Name}");
-            return true;
+            // C# 插件加载逻辑（原有逻辑）
+            return LoadCSharpPlugin(container);
         }
         catch (Exception ex)
         {
             container.SetError($"加载插件时发生异常: {ex.Message}", ex);
             _logger.Error($"  加载插件失败: {container.Name}", ex);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// 加载 C# 插件
+    /// </summary>
+    private bool LoadCSharpPlugin(PluginContainer container)
+    {
+        // 1. 创建加载上下文（支持三层依赖解析）
+        var loadContext = new PluginLoadContext(container.AssemblyPath, _globalLibPath, _logger);
+        container.LoadContext = loadContext;
+
+        // 2. 加载程序集
+        container.Assembly = loadContext.LoadFromAssemblyPath(container.AssemblyPath);
+        _logger.Debug($"  程序集已加载: {container.Assembly.FullName}");
+
+        // 3. 查找插件主类
+        var mainClass = container.Assembly.GetType(container.Metadata.Main);
+        if (mainClass == null)
+        {
+            container.SetError($"找不到主类: {container.Metadata.Main}");
+            _logger.Error($"  {container.Error}");
+            return false;
+        }
+
+        // 4. 验证主类实现 IPlugin 接口
+        if (!typeof(IPlugin).IsAssignableFrom(mainClass))
+        {
+            container.SetError($"主类未实现 IPlugin 接口: {container.Metadata.Main}");
+            _logger.Error($"  {container.Error}");
+            return false;
+        }
+
+        // 5. 创建插件实例（支持构造函数注入）
+        container.Instance = (IPlugin?)CreatePluginInstance(mainClass);
+        if (container.Instance == null)
+        {
+            container.SetError("无法创建插件实例");
+            _logger.Error($"  {container.Error}");
+            return false;
+        }
+
+        // 6. 更新状态
+        container.State = PluginState.Loaded;
+        container.LoadedAt = DateTime.UtcNow;
+        container.ClearError();
+
+        _logger.Info($"  C# 插件加载成功: {container.Name}");
+        return true;
+    }
+
+    /// <summary>
+    /// 加载 Python 插件
+    /// </summary>
+    private bool LoadPythonPlugin(PluginContainer container)
+    {
+        if (_serviceProvider == null)
+        {
+            _logger.Error("服务提供者未设置，无法加载 Python 插件");
+            return false;
+        }
+
+        // 尝试获取 Python 插件加载器
+        var pythonLoaderType = Type.GetType("NetherGate.Python.PythonPluginLoader, NetherGate.Python");
+        if (pythonLoaderType == null)
+        {
+            _logger.Error("未找到 NetherGate.Python 程序集，请确保已安装 Python 插件支持");
+            _logger.Info("提示：运行 'dotnet add package NetherGate.Python' 安装 Python 插件支持");
+            return false;
+        }
+
+        var pythonLoader = _serviceProvider.GetService(pythonLoaderType);
+        if (pythonLoader == null)
+        {
+            _logger.Error("无法获取 Python 插件加载器实例");
+            _logger.Info("提示：请在 Program.cs 中调用 services.AddPythonPluginSupport()");
+            return false;
+        }
+
+        // 转换元数据为 Python 元数据
+        var pythonMetadataType = Type.GetType("NetherGate.Python.PythonPluginMetadata, NetherGate.Python");
+        if (pythonMetadataType == null)
+        {
+            _logger.Error("无法找到 PythonPluginMetadata 类型");
+            return false;
+        }
+
+        var pythonMetadata = Activator.CreateInstance(pythonMetadataType);
+        if (pythonMetadata == null)
+        {
+            _logger.Error("无法创建 Python 元数据实例");
+            return false;
+        }
+
+        // 复制元数据属性
+        CopyMetadataProperties(container.Metadata, pythonMetadata);
+
+        // 调用 Python 加载器的 LoadPythonPlugin 方法
+        var loadMethod = pythonLoaderType.GetMethod("LoadPythonPlugin");
+        if (loadMethod == null)
+        {
+            _logger.Error("无法找到 LoadPythonPlugin 方法");
+            return false;
+        }
+
+        var pluginInstance = loadMethod.Invoke(pythonLoader, new[] { container.PluginDirectory, pythonMetadata });
+        if (pluginInstance is IPlugin plugin)
+        {
+            container.Instance = plugin;
+            container.State = PluginState.Loaded;
+            container.LoadedAt = DateTime.UtcNow;
+            container.ClearError();
+
+            _logger.Info($"  Python 插件加载成功: {container.Name}");
+            return true;
+        }
+
+        _logger.Error("Python 插件加载失败：返回的实例无效");
+        return false;
+    }
+
+    /// <summary>
+    /// 复制元数据属性（从 PluginMetadata 到 PythonPluginMetadata）
+    /// </summary>
+    private void CopyMetadataProperties(PluginMetadata source, object target)
+    {
+        var targetType = target.GetType();
+
+        // 使用反射复制属性
+        var properties = new Dictionary<string, object?>
+        {
+            ["Id"] = source.Id,
+            ["Name"] = source.Name,
+            ["Version"] = source.Version,
+            ["Description"] = source.Description,
+            ["Author"] = source.Author,
+            ["Website"] = source.Website,
+            ["Type"] = source.Type,
+            ["Main"] = source.Main,
+            ["PythonVersion"] = source.PythonVersion,
+            ["Dependencies"] = source.Dependencies,
+            ["SoftDependencies"] = source.SoftDependencies,
+            ["PythonDependencies"] = source.PythonDependencies,
+            ["LoadOrder"] = source.LoadOrder
+        };
+
+        foreach (var (propName, value) in properties)
+        {
+            var prop = targetType.GetProperty(propName);
+            if (prop != null && prop.CanWrite)
+            {
+                prop.SetValue(target, value);
+            }
         }
     }
 
