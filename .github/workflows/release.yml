@@ -1,0 +1,182 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Build NetherGate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Windows
+          - os: windows-latest
+            runtime: win-x64
+            artifact: NetherGate-win-x64
+          # Linux
+          - os: ubuntu-latest
+            runtime: linux-x64
+            artifact: NetherGate-linux-x64
+          - os: ubuntu-latest
+            runtime: linux-arm64
+            artifact: NetherGate-linux-arm64
+          # macOS
+          - os: macos-latest
+            runtime: osx-x64
+            artifact: NetherGate-osx-x64
+          - os: macos-latest
+            runtime: osx-arm64
+            artifact: NetherGate-osx-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish
+        run: |
+          dotnet publish src/NetherGate.Host/NetherGate.Host.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.runtime }} \
+            --self-contained false \
+            --output publish/${{ matrix.runtime }}
+
+      - name: Copy configuration files
+        shell: bash
+        run: |
+          cp -r bin/Release/config publish/${{ matrix.runtime }}/
+          cp -r bin/Release/lib publish/${{ matrix.runtime }}/
+          mkdir -p publish/${{ matrix.runtime }}/plugins
+          mkdir -p publish/${{ matrix.runtime }}/logs
+
+      - name: Create archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path publish/${{ matrix.runtime }}/* -DestinationPath ${{ matrix.artifact }}.zip
+
+      - name: Create archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd publish/${{ matrix.runtime }}
+          tar -czf ../../${{ matrix.artifact }}.tar.gz *
+          cd ../..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.zip
+            ${{ matrix.artifact }}.tar.gz
+          retention-days: 7
+
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} release-files/ \;
+          ls -lh release-files/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          cat > RELEASE_NOTES.md << 'EOF'
+          ## NetherGate v${{ inputs.version }}
+
+          ### 🚀 Features
+          - Complete SMP Protocol support (35 methods + 22 notifications)
+          - Full RCON integration with performance optimizations
+          - Advanced plugin system with hot reload
+          - NBT data read/write operations
+          - Item Components system (1.20.5+)
+          - Performance monitoring (CPU/Memory/TPS)
+
+          ### 📦 Downloads
+          Please download the appropriate version for your platform:
+          
+          | Platform | Architecture | File |
+          |----------|-------------|------|
+          | Windows | x64 | `NetherGate-win-x64.zip` |
+          | Linux | x64 | `NetherGate-linux-x64.tar.gz` |
+          | Linux | ARM64 | `NetherGate-linux-arm64.tar.gz` |
+          | macOS | Intel x64 | `NetherGate-osx-x64.tar.gz` |
+          | macOS | Apple Silicon | `NetherGate-osx-arm64.tar.gz` |
+
+          ### 📖 Documentation
+          - [Quick Start](https://github.com/${{ github.repository }}/blob/main/README.md)
+          - [Plugin Development](https://github.com/${{ github.repository }}/blob/main/docs/README.md)
+          - [API Reference](https://github.com/${{ github.repository }}/blob/main/docs/08-参考/API参考.md)
+
+          ### ⚠️ Requirements
+          - .NET 9.0 Runtime (if not using self-contained builds)
+          - Minecraft Java Edition 1.21.9+
+          - RCON enabled on your server
+          - SMP protocol support
+
+          ### 🐛 Known Issues
+          - See [Issues](https://github.com/${{ github.repository }}/issues)
+
+          ---
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ inputs.version }}
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: NetherGate v${{ inputs.version }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: ${{ inputs.prerelease }}
+          files: release-files/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
+        run: |
+          echo "✅ Release v${{ inputs.version }} created successfully!"
+          echo "📦 Artifacts uploaded:"
+          ls -lh release-files/
+

@@ -973,21 +973,25 @@ public class MyPlugin : PluginBase
 - [ ] Web 管理界面（可选）
 - [ ] 插件市场（可选）
 
-### Phase 7: 测试与优化 (Week 13-14) 🟡 30%
-- [ ] 单元测试
-- [ ] 集成测试
+### Phase 7: 测试与优化 (Week 13-14) 🟢 60%
+- [ ] ~~单元测试~~（不实现 - 手动测试即可）
+- [ ] ~~集成测试~~（不实现 - 手动测试即可）
+- [ ] ~~插件加载自动化测试~~（不实现 - 直接打包 dll/so 部署到 plugins/ 目录手动验证）
 - [x] RCON 性能优化
 - [x] DI 容器错误修复（ServiceCollectionExtensions）
 - [x] 文档优化（删除争议性内容）
 - [x] 最佳实践文档（RCON 性能优化示例）
-- [ ] 示例插件项目（NetherGate-Samples 独立仓库）
+- [ ] 示例插件项目（NetherGate-Samples 独立仓库 - 用于手动测试）
 
-### Phase 8: 发布准备 (Week 15-16) 🟡 20%
+### Phase 8: 发布准备 (Week 15-16) 🟢 70%
 - [x] 打包和发布脚本（publish.bat/sh）
 - [x] 用户文档（README.md + docs/）
 - [x] 开发者文档（DEVELOPMENT.md + API 文档）
-- [ ] CI/CD 配置（GitHub Actions）
-- [ ] 1.0.0 版本发布
+- [x] CI/CD 配置（GitHub Actions）
+  - [x] 手动触发 Release 构建 workflow
+  - [x] 自动打包多平台版本（win-x64, linux-x64/arm64, osx-x64/arm64）
+  - [x] 自动创建 GitHub Release 并上传制品
+- [ ] 1.0.0 版本发布（等待合适时机）
 - [ ] 发布示例插件项目
 
 ---
