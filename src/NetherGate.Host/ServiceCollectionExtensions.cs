@@ -30,6 +30,8 @@ using NetherGate.Core.Leaderboard;
 using NetherGate.API.Analytics;
 using NetherGate.Core.Analytics;
 using NetherGate.API.Plugins;
+using NetherGate.Python;
+using NetherGate.Script;
 
 // 命名空间别名，避免冲突
 using ApiLogLevel = NetherGate.API.Logging.LogLevel;
@@ -149,6 +151,9 @@ public static class ServiceCollectionExtensions
         // RCON 客户端
         if (config.Rcon.Enabled)
         {
+            // 注册 RconConfig（RconService 需要）
+            services.AddSingleton(config.Rcon);
+            
             services.AddSingleton<RconClient>(sp =>
                 new RconClient(
                     config.Rcon.Host,
@@ -180,11 +185,47 @@ public static class ServiceCollectionExtensions
         NetherGateConfig config,
         WebSocketConfig wsConfig)
     {
-        // WebSocket 消息处理器
-        services.AddSingleton<WebSocketMessageHandler>();
+        // 注册获取插件列表的委托（WebSocketMessageHandler 需要）
+        // 注意：这个注册必须在 PluginManager 注册之前，但会在运行时才真正解析 PluginManager
+        services.AddSingleton<Func<IReadOnlyList<PluginContainer>>>(sp =>
+        {
+            return () => sp.GetRequiredService<PluginManager>().GetAllPluginContainers();
+        });
         
-        // WebSocket 服务器
-        services.AddSingleton<WebSocketServer>();
+        // WebSocket 服务器和消息处理器有循环依赖，需要手动注册以打破循环
+        // 先注册 WebSocketServer（使用延迟获取的 messageHandler）
+        services.AddSingleton<WebSocketServer>(sp =>
+        {
+            // 使用延迟解析来打破循环依赖
+            WebSocketMessageHandler? messageHandler = null;
+            var server = new WebSocketServer(
+                wsConfig,
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("WebSocket"),
+                null! // 临时占位符
+            );
+            
+            // 通过反射设置 _messageHandler 字段
+            var field = typeof(WebSocketServer).GetField("_messageHandler", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            
+            // 延迟创建 messageHandler
+            messageHandler = new WebSocketMessageHandler(
+                wsConfig,
+                sp.GetRequiredService<ApiLoggerFactory>().CreateLogger("WsHandler"),
+                sp.GetRequiredService<ApiLoggerFactory>(),
+                sp.GetRequiredService<IEventBus>(),
+                sp.GetService<ISmpApi>(),
+                sp.GetRequiredService<IPlayerDataReader>(),
+                sp.GetRequiredService<IWorldDataReader>(),
+                sp.GetRequiredService<Func<IReadOnlyList<PluginContainer>>>(),
+                sp.GetService<IServerCommandExecutor>(),
+                server
+            );
+            
+            field?.SetValue(server, messageHandler);
+            return server;
+        });
+        
         services.AddSingleton<IWebSocketServer>(sp => sp.GetRequiredService<WebSocketServer>());
         
         // WebSocket 事件桥接
@@ -193,6 +234,9 @@ public static class ServiceCollectionExtensions
         // 日志监听器
         if (config.LogListener.Enabled)
         {
+            // 注册 LogListenerConfig（LogListener 需要）
+            services.AddSingleton(config.LogListener);
+            
             services.AddSingleton<LogListener>();
         }
         
@@ -345,8 +389,17 @@ public static class ServiceCollectionExtensions
         // 服务器进程管理
         if (config.ServerProcess.Enabled)
         {
+            // 注册 ServerProcessConfig（ServerProcessManager 需要）
+            services.AddSingleton(config.ServerProcess);
+            
             services.AddSingleton<NetherGate.Core.Process.ServerProcessManager>();
         }
+        
+        // 注册获取插件数量的委托（HealthService 需要）
+        services.AddSingleton<Func<int>>(sp =>
+        {
+            return () => sp.GetRequiredService<PluginManager>().GetAllPluginContainers().Count;
+        });
         
         // 健康检查服务
         services.AddSingleton<HealthService>();
@@ -406,6 +459,12 @@ public static class ServiceCollectionExtensions
             
             return pm;
         });
+        
+        // 添加 Python 插件支持
+        services.AddPythonPluginSupport();
+        
+        // 添加 JavaScript 插件支持
+        services.AddJavaScriptPluginSupport(config.Plugins.Directory);
         
         return services;
     }

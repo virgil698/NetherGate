@@ -125,7 +125,9 @@ public class EventBus : IEventBus
         if (@event == null)
             throw new ArgumentNullException(nameof(@event));
 
-        var eventType = typeof(TEvent);
+        // 使用运行时类型进行分发，避免因基类引用导致订阅不到的问题
+        // 例如：变量类型为 ServerEvent，但实际为 ServerReadyEvent
+        var eventType = @event.GetType();
         var handlers = GetHandlers(eventType);
 
         if (handlers.Count == 0)

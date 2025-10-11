@@ -77,6 +77,10 @@ class Program
             _config = ConfigurationLoader.Load();
             _wsConfig = WebSocketConfigLoader.Load();
 
+            // 检查并自动配置 server.properties
+            Console.WriteLine("[NetherGate] 检查服务器配置...");
+            await CheckAndFixServerPropertiesAsync(_config);
+
             // 构建主机
             Console.WriteLine("[NetherGate] [2/3] 初始化服务...");
             var host = CreateHostBuilder(args).Build();
@@ -147,6 +151,157 @@ class Program
         
         return input == "y" || input == "yes";
     }
+
+    /// <summary>
+    /// 检查并自动修正 server.properties 配置
+    /// </summary>
+    static Task CheckAndFixServerPropertiesAsync(NetherGateConfig config)
+    {
+        try
+        {
+            var serverDir = config.ServerProcess.Server.WorkingDirectory;
+            var propertiesPath = Path.Combine(serverDir, "server.properties");
+
+            // 检查文件是否存在
+            if (!File.Exists(propertiesPath))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"⚠ 未找到 server.properties 文件: {propertiesPath}");
+                Console.ResetColor();
+                Console.WriteLine("  跳过配置检查，将使用 NetherGate 配置启动");
+                return Task.CompletedTask;
+            }
+
+            // 创建临时日志记录器用于配置管理
+            var tempLogger = new ConsoleLogger("ConfigCheck");
+            var propsManager = new ServerPropertiesManager(tempLogger, serverDir);
+
+            // 加载 server.properties
+            if (!propsManager.Load())
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("✗ 无法读取 server.properties 文件");
+                Console.ResetColor();
+                return Task.CompletedTask;
+            }
+
+            // 检查并自动启用 RCON 和 SMP
+            var modified = propsManager.EnsureRconAndSmpEnabled();
+            
+            // 同步配置到 NetherGate
+            var configModified = propsManager.SyncToNetherGateConfig(config);
+
+            // 显示配置信息
+            var info = propsManager.GetInfo();
+            Console.WriteLine($"  RCON: {(info.RconEnabled ? "✓ 已启用" : "✗ 禁用")} (端口: {info.RconPort})");
+            Console.WriteLine($"  SMP:  {(info.SmpEnabled ? "✓ 已启用" : "✗ 禁用")} (端口: {info.SmpPort})");
+
+            // 如果修改了 server.properties，保存并提示
+            if (modified)
+            {
+                Console.WriteLine();
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("⚠ 已自动修改 server.properties 以启用 RCON 和 SMP");
+                Console.ResetColor();
+                
+                if (propsManager.Save())
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("✓ server.properties 已保存");
+                    Console.ResetColor();
+                    
+                    Console.WriteLine();
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("⚠ 重要：请重启 Minecraft 服务器以应用新配置！");
+                    Console.ResetColor();
+                    Console.WriteLine();
+                }
+            }
+
+            // 如果同步了配置，保存 NetherGate 配置
+            if (configModified)
+            {
+                Console.WriteLine();
+                Console.WriteLine("同步配置到 NetherGate...");
+                
+                var configPath = ConfigurationLoader.GetConfigPath();
+                var format = configPath.EndsWith(".yaml") || configPath.EndsWith(".yml") 
+                    ? ConfigFormat.Yaml 
+                    : ConfigFormat.Json;
+                
+                ConfigurationLoader.SaveConfig(configPath, config, format);
+                
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"✓ NetherGate 配置已更新并保存到: {configPath}");
+                Console.ResetColor();
+                Console.WriteLine();
+            }
+            
+            return Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"✗ 配置检查失败: {ex.Message}");
+            Console.ResetColor();
+            Console.WriteLine("  将继续使用现有配置启动");
+            return Task.CompletedTask;
+        }
+    }
+}
+
+/// <summary>
+/// 简单的控制台日志记录器
+/// </summary>
+class ConsoleLogger : ILogger
+{
+    private readonly string _name;
+
+    public ConsoleLogger(string name)
+    {
+        _name = name;
+    }
+
+    public bool IsEnabled(API.Logging.LogLevel level) => true;
+
+    public void Trace(string message) { }
+    public void Debug(string message) { }
+    
+    public void Info(string message)
+    {
+        Console.WriteLine($"  [{_name}] {message}");
+    }
+    
+    public void Warning(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"  [{_name}] ⚠ {message}");
+        Console.ResetColor();
+    }
+    
+    public void Error(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"  [{_name}] ✗ {message}");
+        Console.ResetColor();
+    }
+    
+    public void Error(string message, Exception? exception = null)
+    {
+        if (exception != null)
+            Error($"{message}: {exception.Message}");
+        else
+            Error(message);
+    }
+    
+    public void Fatal(string message, Exception? exception = null)
+    {
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        Console.WriteLine($"  [{_name}] ✗✗ FATAL: {message}");
+        if (exception != null)
+            Console.WriteLine($"      {exception.Message}");
+        Console.ResetColor();
+    }
 }
 
 /// <summary>
@@ -157,6 +312,7 @@ public class NetherGateHostedService : IHostedService
     private readonly ILogger _logger;
     private readonly IEventBus _eventBus;
     private readonly SmpService _smpService;
+    private readonly IHostApplicationLifetime _appLifetime;
     private readonly RconService? _rconService;
     private readonly WebSocketServer? _wsServer;
     private readonly EventBridge? _wsEventBridge;
@@ -181,11 +337,13 @@ public class NetherGateHostedService : IHostedService
         IServerCommandExecutor serverCommandExecutor,
         NetherGateConfig config,
         WebSocketConfig wsConfig,
-        NetherGate.Core.Monitoring.HealthService healthService)
+        NetherGate.Core.Monitoring.HealthService healthService,
+        IHostApplicationLifetime appLifetime)
     {
         _logger = loggerFactory.CreateLogger("NetherGate");
         _eventBus = eventBus;
         _smpService = smpService;
+        _appLifetime = appLifetime;
         _pluginManager = pluginManager;
         _commandManager = commandManager;
         _smpClient = smpClient;
@@ -208,44 +366,20 @@ public class NetherGateHostedService : IHostedService
         _logger.Info($"版本: 0.1.0-alpha");
         _logger.Info($".NET 版本: {Environment.Version}");
 
-        // 注册事件
-        _eventBus.Subscribe<SmpConnectedEvent>(OnSmpConnected);
-        _eventBus.Subscribe<SmpDisconnectedEvent>(OnSmpDisconnected);
-        _eventBus.Subscribe<ServerReadyEvent>(OnServerReady);
-
         // 初始化目录
         InitializeDirectories();
 
-        // 启动服务器进程
-        if (_serverProcessManager != null && _config.ServerProcess.Enabled)
-        {
-            var launchMethod = _config.ServerProcess.LaunchMethod.ToLower();
-            if (launchMethod == "java" || launchMethod == "script")
-            {
-                _logger.Info("启动 Minecraft 服务端...");
-                await _serverProcessManager.StartAsync();
-            }
-        }
+        // 注册插件相关命令（提前注册以便使用）
+        RegisterPluginCommands();
 
-        // 启动 SMP 服务
-        _logger.Info("启动 SMP 服务...");
-        await _smpService.StartAsync();
-
-        // 启动 RCON 服务
-        if (_rconService != null && _config.Rcon.Enabled)
-        {
-            _logger.Info("启动 RCON 服务...");
-            await _rconService.StartAsync();
-        }
-
-        // 启动日志监听器
+        // 启动日志监听器（用于监控服务器日志）
         if (_logListener != null && _config.LogListener.Enabled)
         {
             _logger.Info("启动日志监听器...");
             await _logListener.StartAsync();
         }
 
-        // 启动 WebSocket 服务器
+        // 启动 WebSocket 服务器（独立服务，不依赖 MC 服务器）
         if (_wsServer != null && _wsConfig.Enabled)
         {
             _logger.Info("启动 WebSocket 服务器...");
@@ -260,19 +394,90 @@ public class NetherGateHostedService : IHostedService
         // 启动健康检查
         await _healthService.StartAsync();
 
-        // 连接 SMP
+        // 注册事件处理器
+        _eventBus.Subscribe<SmpConnectedEvent>(OnSmpConnected);
+        _eventBus.Subscribe<SmpDisconnectedEvent>(OnSmpDisconnected);
+
+        // 启动服务器进程并等待就绪
+        bool serverReady = false;
+        
+        if (_serverProcessManager != null && _config.ServerProcess.Enabled)
+        {
+            var launchMethod = _config.ServerProcess.LaunchMethod.ToLower();
+            if (launchMethod == "java" || launchMethod == "script")
+            {
+                // 创建服务器就绪等待信号
+                var serverReadyTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                
+                // 使用临时变量来捕获事件
+                Action<ServerReadyEvent>? tempHandler = null;
+                tempHandler = evt => {
+                    _logger.Info($"✓ 检测到服务器启动完成信号（耗时: {evt.StartupTimeSeconds:F3} 秒）");
+                    OnServerReady(evt);
+                    serverReadyTcs.TrySetResult(true);
+                    // 触发后立即取消订阅，避免重复触发
+                    if (tempHandler != null)
+                        _eventBus.Unsubscribe(tempHandler);
+                };
+                
+                // 订阅服务器就绪事件
+                _eventBus.Subscribe<ServerReadyEvent>(tempHandler);
+                
+                _logger.Info("启动 Minecraft 服务端...");
+                await _serverProcessManager.StartAsync();
+                
+                _logger.Info("等待服务器启动完成（最多等待 5 分钟）...");
+                
+                // 等待服务器就绪（最多等待 5 分钟）
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromMinutes(5));
+                
+                try
+                {
+                    await serverReadyTcs.Task.WaitAsync(cts.Token);
+                    serverReady = true;
+                    _logger.Info("✓ 服务器已就绪，开始连接服务");
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.Warning("等待服务器启动超时（5 分钟），将继续启动连接服务");
+                    // 清理订阅
+                    if (tempHandler != null)
+                        _eventBus.Unsubscribe(tempHandler);
+                }
+                
+                // 额外等待 1 秒，确保服务器完全稳定
+                if (serverReady)
+                {
+                    _logger.Info("等待 1 秒让服务器完全稳定...");
+                    await Task.Delay(1000, cancellationToken);
+                }
+            }
+        }
+        else
+        {
+            _logger.Info("服务器进程管理未启用，假定服务器已运行");
+        }
+
+        // 服务器就绪后，启动 SMP 和 RCON 连接
+        _logger.Info("启动 SMP 服务...");
+        await _smpService.StartAsync();
+
         if (_config.ServerConnection.AutoConnect)
         {
             _logger.Info("连接到 SMP 服务器...");
             await _smpClient.ConnectAsync();
         }
 
-        // 加载插件
+        if (_rconService != null && _config.Rcon.Enabled)
+        {
+            _logger.Info("启动 RCON 服务...");
+            await _rconService.StartAsync();
+        }
+
+        // 最后加载插件
         _logger.Info("加载插件...");
         await _pluginManager.LoadAllPluginsAsync();
-
-        // 注册插件相关命令
-        RegisterPluginCommands();
         
         _logger.Info("========================================");
         _logger.Info("NetherGate 启动完成！");
@@ -326,6 +531,38 @@ public class NetherGateHostedService : IHostedService
         await _healthService.StopAsync();
 
         _logger.Info("已安全退出");
+    }
+
+    private async Task ShutdownAsync()
+    {
+        _logger.Info("收到 stop 指令，正在请求 MC 有序关闭...");
+
+        // 1) 优先尝试通过 STDIN 发送 stop 给 MC（原生行为）
+        try
+        {
+            var preferStdin = _serverProcessManager != null
+                && _serverProcessManager.IsRunning
+                && !_config.ServerProcess.LaunchMethod.Equals("external", StringComparison.OrdinalIgnoreCase);
+
+            if (preferStdin)
+            {
+                await _serverProcessManager!.SendCommandAsync("stop");
+            }
+            else
+            {
+                await _serverCommandExecutor.TryExecuteAsync("stop");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"发送 stop 到 MC 失败: {ex.Message}");
+        }
+
+        // 2) 等待几秒让 MC 正常落盘关闭
+        await Task.Delay(3000);
+
+        // 3) 触发宿主应用的停止
+        _appLifetime.StopApplication();
     }
 
     private void InitializeDirectories()
@@ -389,6 +626,7 @@ public class NetherGateHostedService : IHostedService
                 // 处理 stop 命令
                 if (input.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase))
                 {
+                    await ShutdownAsync();
                     break;
                 }
 
@@ -421,6 +659,19 @@ public class NetherGateHostedService : IHostedService
 
         try
         {
+            // 前台交互：优先直接写入 STDIN，保持与原版控制台一致（RCON 仅后台使用）
+            var preferStdin = _serverProcessManager != null
+                && _serverProcessManager.IsRunning
+                && !_config.ServerProcess.LaunchMethod.Equals("external", StringComparison.OrdinalIgnoreCase);
+
+            if (preferStdin)
+            {
+                await _serverProcessManager!.SendCommandAsync(serverCommand);
+                _logger.Info($"已发送到 MC 服务器: {serverCommand}");
+                return;
+            }
+
+            // 无法使用 STDIN（例如 external 模式），回退到统一执行器（可能使用 RCON）
             var ok = await _serverCommandExecutor.TryExecuteAsync(serverCommand);
             if (ok)
                 _logger.Info($"已发送到 MC 服务器: {serverCommand}");

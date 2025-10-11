@@ -9,7 +9,7 @@ namespace NetherGate.Core.Process;
 /// </summary>
 internal class ServerReadyMatcher : RegexLogMatcher
 {
-	public ServerReadyMatcher() : base(@"Done \(([\d.]+)s\)!?", priority: 100, RegexOptions.Compiled | RegexOptions.IgnoreCase) { }
+	public ServerReadyMatcher() : base(@"^Done \(([\d.]+)s\)!?", priority: 100, RegexOptions.Compiled | RegexOptions.IgnoreCase) { }
 
 	protected override ServerEvent? OnMatch(Match match, string level, string? thread)
 	{

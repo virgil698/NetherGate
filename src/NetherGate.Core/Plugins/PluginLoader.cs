@@ -101,6 +101,12 @@ public class PluginLoader
             assemblyPath = pluginDirectory;
             _logger.Debug($"检测到 Python 插件: {metadata.Name}");
         }
+        else if (string.Equals(metadata.Type, "javascript", StringComparison.OrdinalIgnoreCase))
+        {
+            // JavaScript 插件：使用插件目录本身作为"程序集路径"
+            assemblyPath = pluginDirectory;
+            _logger.Debug($"检测到 JavaScript 插件: {metadata.Name}");
+        }
         else
         {
             // C# 插件（默认）：查找 DLL
@@ -199,6 +205,12 @@ public class PluginLoader
             if (string.Equals(container.Metadata.Type, "python", StringComparison.OrdinalIgnoreCase))
             {
                 return LoadPythonPlugin(container);
+            }
+
+            // 检查是否是 JavaScript 插件
+            if (string.Equals(container.Metadata.Type, "javascript", StringComparison.OrdinalIgnoreCase))
+            {
+                return LoadJavaScriptPlugin(container);
             }
 
             // C# 插件加载逻辑（原有逻辑）
@@ -327,6 +339,59 @@ public class PluginLoader
         }
 
         _logger.Error("Python 插件加载失败：返回的实例无效");
+        return false;
+    }
+
+    /// <summary>
+    /// 加载 JavaScript 插件
+    /// </summary>
+    private bool LoadJavaScriptPlugin(PluginContainer container)
+    {
+        if (_serviceProvider == null)
+        {
+            _logger.Error("服务提供者未设置，无法加载 JavaScript 插件");
+            return false;
+        }
+
+        // 尝试获取 JavaScript 插件加载器
+        var jsLoaderType = Type.GetType("NetherGate.Script.JavaScriptPluginLoader, NetherGate.Script");
+        if (jsLoaderType == null)
+        {
+            _logger.Error("未找到 NetherGate.Script 程序集，请确保已安装 JavaScript 插件支持");
+            _logger.Info("提示：请确保 NetherGate.Script 项目已正确引用");
+            return false;
+        }
+
+        var jsLoader = _serviceProvider.GetService(jsLoaderType);
+        if (jsLoader == null)
+        {
+            _logger.Error("无法获取 JavaScript 插件加载器实例");
+            _logger.Info("提示：请在 ServiceCollectionExtensions.cs 中调用 services.AddJavaScriptPluginSupport()");
+            return false;
+        }
+
+        // 调用 JavaScript 加载器的 LoadJavaScriptPlugin 方法
+        // JavaScript 插件直接使用 PluginMetadata，不需要特殊的元数据类型
+        var loadMethod = jsLoaderType.GetMethod("LoadJavaScriptPlugin");
+        if (loadMethod == null)
+        {
+            _logger.Error("无法找到 LoadJavaScriptPlugin 方法");
+            return false;
+        }
+
+        var pluginInstance = loadMethod.Invoke(jsLoader, new object[] { container.PluginDirectory, container.Metadata });
+        if (pluginInstance is IPlugin plugin)
+        {
+            container.Instance = plugin;
+            container.State = PluginState.Loaded;
+            container.LoadedAt = DateTime.UtcNow;
+            container.ClearError();
+
+            _logger.Info($"  JavaScript 插件加载成功: {container.Name}");
+            return true;
+        }
+
+        _logger.Error("JavaScript 插件加载失败：返回的实例无效");
         return false;
     }
 
