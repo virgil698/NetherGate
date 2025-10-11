@@ -25,6 +25,7 @@ NetherGate 让插件开发变得**简单而强大**：
 - 🔥 **真正的热重载**：插件更新无需重启服务器，保留运行状态，支持跨版本迁移
 - 📦 **智能依赖管理**：自动下载 NuGet 包，智能解决版本冲突，告别依赖地狱
 - 🎭 **完全隔离**：每个插件独立运行环境，互不干扰，崩溃不影响其他插件
+- 🌈 **多语言支持**：原生支持 C#、Python、JavaScript 插件开发，满足不同开发者需求
 
 ### **🚀 100% 功能覆盖率**
 
@@ -45,6 +46,8 @@ NetherGate 让插件开发变得**简单而强大**：
 | **统计分析** | ✅ 100% | 游戏统计/方块收集进度 |
 | **排行榜系统** | ✅ 100% | 灵活的排行榜管理 |
 | **数据推送** | ✅ 100% | WebSocket 实时数据广播 |
+| **Python 插件** | ✅ 100% | 完整的 Python 插件支持 |
+| **JavaScript 插件** | ✅ 100% | 完整的 JavaScript 插件支持 |
 
 ### **💡 核心优势**
 
@@ -65,6 +68,10 @@ NetherGate 让插件开发变得**简单而强大**：
   - **Windows**: x64, x86, ARM64
   - **Linux**: x64, ARM, ARM64
   - **macOS**: Intel x64, Apple Silicon ARM64
+- 🌈 **多语言插件支持**：
+  - ✅ **C# 插件**：原生性能，完整的 .NET 生态支持
+  - ✅ **Python 插件**：简单易用，快速开发原型
+  - ✅ **JavaScript 插件**：熟悉的语法，Web 开发者友好
 - 📚 **文档完善**：覆盖所有功能的中文文档，丰富示例
 
 ---
@@ -163,7 +170,11 @@ server_process:
 
 ## 🔌 **5 分钟创建第一个插件**
 
-### **1. 安装 NuGet 包**
+NetherGate 支持三种插件开发语言，选择你熟悉的语言开始：
+
+### **C# 插件开发**
+
+#### **1. 安装 NuGet 包**
 
 NetherGate.API 发布在 GitHub Packages，安装前需要配置 NuGet 源：
 
@@ -249,6 +260,69 @@ dotnet build
 ```
 
 **完整教程：** [第一个插件](docs/01-快速开始/第一个插件.md) | [插件开发指南](docs/03-插件开发/插件开发指南.md)
+
+### **Python 插件开发**
+
+```python
+# my_plugin.py
+from nethergate import Plugin, EventBus, Logger
+
+class MyPlugin(Plugin):
+    def on_enable(self, context):
+        self.context = context
+        self.logger = context.logger
+        self.logger.info("MyPlugin 已启用！")
+        
+        # 订阅玩家加入事件
+        context.event_bus.subscribe("PlayerJoinedEvent", self.on_player_joined)
+    
+    def on_player_joined(self, event):
+        # 发送欢迎消息
+        self.context.game_display.send_chat_message(
+            event.player_name,
+            f"§a欢迎 {event.player_name} 加入服务器！"
+        )
+    
+    def on_disable(self):
+        self.logger.info("MyPlugin 已禁用")
+```
+
+**完整教程：** [Python 插件开发指南](docs/03-插件开发/Python插件开发指南.md) | [Python API 使用指南](docs/03-插件开发/Python核心API使用指南.md)
+
+### **JavaScript 插件开发**
+
+```javascript
+// my_plugin.js
+class MyPlugin {
+    onEnable(context) {
+        this.context = context;
+        this.logger = context.logger;
+        this.logger.info("MyPlugin 已启用！");
+        
+        // 订阅玩家加入事件
+        context.eventBus.subscribe("PlayerJoinedEvent", (event) => {
+            this.onPlayerJoined(event);
+        });
+    }
+    
+    onPlayerJoined(event) {
+        // 发送欢迎消息
+        this.context.gameDisplay.sendChatMessage(
+            event.playerName,
+            `§a欢迎 ${event.playerName} 加入服务器！`
+        );
+    }
+    
+    onDisable() {
+        this.logger.info("MyPlugin 已禁用");
+    }
+}
+
+// 导出插件实例
+plugin = new MyPlugin();
+```
+
+**完整教程：** [JavaScript 插件开发指南](docs/03-插件开发/JavaScript插件开发指南.md) | [JavaScript API 使用指南](docs/03-插件开发/JavaScript核心API使用指南.md)
 
 ---
 
@@ -363,10 +437,17 @@ await context.GameUtilities.CreateSequence()
 - [命令系统](docs/02-核心功能/命令系统.md) - 命令注册
 
 ### **🔧 插件开发**
-- [插件开发指南](docs/03-插件开发/插件开发指南.md)
-- [配置文件](docs/03-插件开发/配置文件.md)
-- [调试技巧](docs/03-插件开发/调试技巧.md)
-- [发布流程](docs/03-插件开发/发布流程.md)
+- **C# 插件**
+  - [插件开发指南](docs/03-插件开发/插件开发指南.md)
+  - [配置文件](docs/03-插件开发/配置文件.md)
+  - [调试技巧](docs/03-插件开发/调试技巧.md)
+  - [发布流程](docs/03-插件开发/发布流程.md)
+- **Python 插件** ⭐ 新增
+  - [Python 插件开发指南](docs/03-插件开发/Python插件开发指南.md)
+  - [Python 核心 API 使用指南](docs/03-插件开发/Python核心API使用指南.md)
+- **JavaScript 插件** ⭐ 新增
+  - [JavaScript 插件开发指南](docs/03-插件开发/JavaScript插件开发指南.md)
+  - [JavaScript 核心 API 使用指南](docs/03-插件开发/JavaScript核心API使用指南.md)
 
 ### **⚙️ 高级功能**
 - [游戏显示 API](docs/04-高级功能/游戏显示API.md)
@@ -378,12 +459,23 @@ await context.GameUtilities.CreateSequence()
 - [排行榜系统](docs/04-高级功能/排行榜系统.md) ⭐ 新增
 - [WebSocket 数据推送](docs/04-高级功能/WebSocket数据推送.md) ⭐ 新增
 
-### **🚀 架构优化**
-- [架构优化指南](docs/05-配置和部署/架构优化指南.md) ⭐ 最新
-- [构造函数注入示例](docs/07-示例和最佳实践/构造函数注入示例.md) ⭐ 最新
-- **依赖注入 (DI)**：支持构造函数注入
-- **连接池**：网络连接复用和管理
-- **分布式插件**：跨服务器节点通信
+### **🚀 配置和部署**
+- [架构优化指南](docs/05-配置和部署/架构优化指南.md)
+- [构建和打包](docs/05-配置和部署/构建和打包.md)
+- [故障排查](docs/05-配置和部署/故障排查.md)
+- **Python 插件架构** ⭐ 新增
+  - [Python 插件架构说明](docs/05-配置和部署/Python插件架构说明.md)
+  - [Python 插件接口兼容性分析](docs/05-配置和部署/Python插件接口兼容性分析.md)
+- **JavaScript 插件架构** ⭐ 新增
+  - [JavaScript 插件架构说明](docs/05-配置和部署/JavaScript插件架构说明.md)
+  - [JavaScript 插件接口兼容性分析](docs/05-配置和部署/JavaScript插件接口兼容性分析.md)
+
+### **📦 示例和最佳实践**
+- [示例插件集](docs/07-示例和最佳实践/示例插件集.md)
+- [Python 示例插件集](docs/07-示例和最佳实践/Python示例插件集.md) ⭐ 新增
+- [构造函数注入示例](docs/07-示例和最佳实践/构造函数注入示例.md)
+- [性能优化](docs/07-示例和最佳实践/性能优化.md)
+- [RCON 性能优化示例](docs/07-示例和最佳实践/RCON性能优化示例.md)
 
 **完整文档索引：** [docs/README.md](docs/README.md)
 
@@ -437,6 +529,8 @@ await context.GameUtilities.CreateSequence()
 - [CTM's AATool](https://github.com/DarwinBaker/AATool) - 成就追踪系统设计灵感和文件读取优化
 - [fNbt](https://github.com/mstefarov/fNbt) - NBT 数据处理
 - [YamlDotNet](https://github.com/aaubry/YamlDotNet) - YAML 配置支持
+- [IronPython](https://ironpython.net/) - Python 运行时支持
+- [Jint](https://github.com/sebastienros/jint) - JavaScript 运行时支持
 - [Minecraft Wiki](https://zh.minecraft.wiki) - 技术文档参考
 
 ---

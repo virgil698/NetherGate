@@ -25,6 +25,7 @@ NetherGate makes plugin development **simple and powerful**:
 - 🔥 **True Hot Reload**: Plugin updates without server restart, preserves runtime state, supports cross-version migration
 - 📦 **Smart Dependency Management**: Automatic NuGet package downloads, intelligent version conflict resolution, say goodbye to dependency hell
 - 🎭 **Complete Isolation**: Each plugin runs in an isolated environment, mutually independent, crashes don't affect other plugins
+- 🌈 **Multi-Language Support**: Native support for C#, Python, and JavaScript plugin development to meet different developer needs
 
 ### **🚀 100% Feature Coverage**
 
@@ -41,12 +42,23 @@ NetherGate makes plugin development **simple and powerful**:
 | **Performance Monitoring** | ✅ 100% | CPU/Memory/TPS |
 | **Game Utilities** | ✅ 100% | Fireworks/music/time/area operations |
 | **Extension Methods** | ✅ 100% | ItemStack/Position extension methods |
+| **Achievement Tracking** | ✅ 100% | Real-time player advancement tracking |
+| **Statistics Analysis** | ✅ 100% | Game statistics/block collection progress |
+| **Leaderboard System** | ✅ 100% | Flexible leaderboard management |
+| **Data Broadcasting** | ✅ 100% | WebSocket real-time data push |
+| **Python Plugins** | ✅ 100% | Full Python plugin support |
+| **JavaScript Plugins** | ✅ 100% | Full JavaScript plugin support |
 
 ### **💡 Core Advantages**
 
 - ⚡ **High Performance**: Native .NET compilation, far more efficient than interpreted languages
 - 🛡️ **Secure Isolation**: AssemblyLoadContext mechanism, complete plugin isolation
-- 🎨 **Modern Design**: Async API, event-driven, dependency injection
+- 🎨 **Modern Architecture**:
+  - ✅ **Dependency Injection (DI)**: Supports constructor injection, loose coupling design
+  - ✅ **Async API**: Fully asynchronous programming model, high performance
+  - ✅ **Event-Driven**: Flexible event subscription and publishing
+  - ✅ **Connection Pooling**: Network connection reuse, efficient resource utilization
+  - ✅ **Distributed Support**: Cross-server node plugin communication
 - 🔥 **Advanced Hot Reload**:
   - ✅ Preserve plugin state (no data loss)
   - ✅ Code changes take effect immediately
@@ -56,6 +68,10 @@ NetherGate makes plugin development **simple and powerful**:
   - **Windows**: x64, x86, ARM64
   - **Linux**: x64, ARM, ARM64
   - **macOS**: Intel x64, Apple Silicon ARM64
+- 🌈 **Multi-Language Plugin Support**:
+  - ✅ **C# Plugins**: Native performance, full .NET ecosystem support
+  - ✅ **Python Plugins**: Easy to use, rapid prototyping
+  - ✅ **JavaScript Plugins**: Familiar syntax, web developer friendly
 - 📚 **Complete Documentation**: Chinese documentation covering all features with rich examples
 
 ---
@@ -154,7 +170,11 @@ server_process:
 
 ## 🔌 **Create Your First Plugin in 5 Minutes**
 
-### **1. Install NuGet Package**
+NetherGate supports three plugin development languages. Choose the one you're familiar with:
+
+### **C# Plugin Development**
+
+#### **1. Install NuGet Package**
 
 NetherGate.API is published on GitHub Packages. You need to configure the NuGet source before installation:
 
@@ -241,6 +261,69 @@ dotnet build
 
 **Complete Tutorial:** [First Plugin](docs/01-快速开始/第一个插件.md) | [Plugin Development Guide](docs/03-插件开发/插件开发指南.md)
 
+### **Python Plugin Development**
+
+```python
+# my_plugin.py
+from nethergate import Plugin, EventBus, Logger
+
+class MyPlugin(Plugin):
+    def on_enable(self, context):
+        self.context = context
+        self.logger = context.logger
+        self.logger.info("MyPlugin enabled!")
+        
+        # Subscribe to player join event
+        context.event_bus.subscribe("PlayerJoinedEvent", self.on_player_joined)
+    
+    def on_player_joined(self, event):
+        # Send welcome message
+        self.context.game_display.send_chat_message(
+            event.player_name,
+            f"§aWelcome {event.player_name} to the server!"
+        )
+    
+    def on_disable(self):
+        self.logger.info("MyPlugin disabled")
+```
+
+**Complete Tutorial:** [Python Plugin Development Guide](docs/03-插件开发/Python插件开发指南.md) | [Python Core API Guide](docs/03-插件开发/Python核心API使用指南.md)
+
+### **JavaScript Plugin Development**
+
+```javascript
+// my_plugin.js
+class MyPlugin {
+    onEnable(context) {
+        this.context = context;
+        this.logger = context.logger;
+        this.logger.info("MyPlugin enabled!");
+        
+        // Subscribe to player join event
+        context.eventBus.subscribe("PlayerJoinedEvent", (event) => {
+            this.onPlayerJoined(event);
+        });
+    }
+    
+    onPlayerJoined(event) {
+        // Send welcome message
+        this.context.gameDisplay.sendChatMessage(
+            event.playerName,
+            `§aWelcome ${event.playerName} to the server!`
+        );
+    }
+    
+    onDisable() {
+        this.logger.info("MyPlugin disabled");
+    }
+}
+
+// Export plugin instance
+plugin = new MyPlugin();
+```
+
+**Complete Tutorial:** [JavaScript Plugin Development Guide](docs/03-插件开发/JavaScript插件开发指南.md) | [JavaScript Core API Guide](docs/03-插件开发/JavaScript核心API使用指南.md)
+
 ---
 
 ## 📚 **Rich Feature API**
@@ -314,13 +397,15 @@ var response = await context.Messenger.SendMessageAsync(
 );
 ```
 
-### **⚙️ More Features**
-- 📁 **File System**: Read/write server files, watch changes
-- 🔒 **Permission System**: Groups, inheritance, wildcards
-- ⏱️ **Performance Monitoring**: CPU, memory, TPS
+### **⚙️ More Advanced Features**
+- 🏆 **Leaderboard System**: Flexible leaderboard management, score updates, rank change events
+- 📡 **WebSocket Broadcasting**: Real-time data push to web/OBS overlays
+- 💬 **Inter-Plugin Communication**: Cross-plugin messaging, modular development
+- 📁 **File System**: Secure file read/write, change watching, automatic backups
+- 🔒 **Permission System**: User groups, permission inheritance, wildcard support
+- ⏱️ **Performance Monitoring**: CPU, memory, TPS real-time monitoring
 - 🎭 **Event System**: 30+ event types, priority support
-- 🎨 **Extension Methods**: ItemStack sorting/filtering, position calculations, statistics
-- 🎯 **Game Utilities**: Fireworks, music, time control, area operations
+- 🎨 **Extension Methods**: ItemStack sorting/filtering, position calculations, statistics analysis
 
 **Complete API Documentation:** [API Reference](docs/08-参考/API参考.md)
 
@@ -343,10 +428,17 @@ var response = await context.Messenger.SendMessageAsync(
 - [Command System](docs/02-核心功能/命令系统.md) - Command registration
 
 ### **🔧 Plugin Development**
-- [Plugin Development Guide](docs/03-插件开发/插件开发指南.md)
-- [Configuration Files](docs/03-插件开发/配置文件.md)
-- [Debugging Tips](docs/03-插件开发/调试技巧.md)
-- [Publishing Process](docs/03-插件开发/发布流程.md)
+- **C# Plugins**
+  - [Plugin Development Guide](docs/03-插件开发/插件开发指南.md)
+  - [Configuration Files](docs/03-插件开发/配置文件.md)
+  - [Debugging Tips](docs/03-插件开发/调试技巧.md)
+  - [Publishing Process](docs/03-插件开发/发布流程.md)
+- **Python Plugins** ⭐ New
+  - [Python Plugin Development Guide](docs/03-插件开发/Python插件开发指南.md)
+  - [Python Core API Guide](docs/03-插件开发/Python核心API使用指南.md)
+- **JavaScript Plugins** ⭐ New
+  - [JavaScript Plugin Development Guide](docs/03-插件开发/JavaScript插件开发指南.md)
+  - [JavaScript Core API Guide](docs/03-插件开发/JavaScript核心API使用指南.md)
 
 ### **⚙️ Advanced Features**
 - [Game Display API](docs/04-高级功能/游戏显示API.md)
@@ -354,6 +446,27 @@ var response = await context.Messenger.SendMessageAsync(
 - [Inter-Plugin Communication](docs/04-高级功能/插件间通信.md)
 - [File System](docs/04-高级功能/文件系统.md)
 - [Performance Monitoring](docs/04-高级功能/性能监控.md)
+- [Achievement and Statistics Tracking](docs/04-高级功能/成就和统计追踪.md) ⭐ New
+- [Leaderboard System](docs/04-高级功能/排行榜系统.md) ⭐ New
+- [WebSocket Data Broadcasting](docs/04-高级功能/WebSocket数据推送.md) ⭐ New
+
+### **🚀 Configuration and Deployment**
+- [Architecture Optimization Guide](docs/05-配置和部署/架构优化指南.md)
+- [Build and Package](docs/05-配置和部署/构建和打包.md)
+- [Troubleshooting](docs/05-配置和部署/故障排查.md)
+- **Python Plugin Architecture** ⭐ New
+  - [Python Plugin Architecture](docs/05-配置和部署/Python插件架构说明.md)
+  - [Python Plugin Interface Compatibility](docs/05-配置和部署/Python插件接口兼容性分析.md)
+- **JavaScript Plugin Architecture** ⭐ New
+  - [JavaScript Plugin Architecture](docs/05-配置和部署/JavaScript插件架构说明.md)
+  - [JavaScript Plugin Interface Compatibility](docs/05-配置和部署/JavaScript插件接口兼容性分析.md)
+
+### **📦 Examples and Best Practices**
+- [Example Plugin Collection](docs/07-示例和最佳实践/示例插件集.md)
+- [Python Example Plugins](docs/07-示例和最佳实践/Python示例插件集.md) ⭐ New
+- [Constructor Injection Examples](docs/07-示例和最佳实践/构造函数注入示例.md)
+- [Performance Optimization](docs/07-示例和最佳实践/性能优化.md)
+- [RCON Performance Optimization](docs/07-示例和最佳实践/RCON性能优化示例.md)
 
 **Complete Documentation Index:** [docs/README.md](docs/README.md)
 
@@ -396,14 +509,19 @@ Thanks to the following projects for providing design inspiration and technical 
 
 - [**MinecraftConnection**](https://github.com/takunology/MinecraftConnection) - Provided important reference for NetherGate's RCON command encapsulation and game operation API design. This project demonstrated how to elegantly encapsulate Minecraft commands. NetherGate further extends this foundation to implement advanced features such as firework systems, music players, and chest operations, providing developers with more convenient game interaction APIs.
 
+- [**CTM's AATool**](https://github.com/DarwinBaker/AATool) - Provided design inspiration for NetherGate's advancement tracking and statistics analysis system. AATool is an excellent Minecraft advancement tracking tool that demonstrates how to elegantly read and track player data. NetherGate adopted its file reading optimization techniques (safe file access, avoiding locks) and real-time tracking mechanisms, combined with .NET's asynchronous features, to provide powerful data tracking and analysis capabilities for plugin developers.
+
 ### **Open Source Projects**
 
 Thanks to the following excellent open source projects:
 
 - [MCDReforged](https://github.com/Fallen-Breath/MCDReforged) - Design philosophy and inspiration source
 - [MinecraftConnection](https://github.com/takunology/MinecraftConnection) - RCON command encapsulation and game operation API design reference
+- [CTM's AATool](https://github.com/DarwinBaker/AATool) - Achievement tracking system design inspiration and file reading optimization
 - [fNbt](https://github.com/mstefarov/fNbt) - NBT data processing
 - [YamlDotNet](https://github.com/aaubry/YamlDotNet) - YAML configuration support
+- [IronPython](https://ironpython.net/) - Python runtime support
+- [Jint](https://github.com/sebastienros/jint) - JavaScript runtime support
 - [Minecraft Wiki](https://zh.minecraft.wiki) - Technical documentation reference
 
 ---
