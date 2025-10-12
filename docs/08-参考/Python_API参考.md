@@ -1029,9 +1029,622 @@ def my_function(self):
 
 ---
 
+## 游戏显示 API
+
+### GameDisplayApi
+
+游戏内显示功能接口（需要 RCON 支持）。
+
+```python
+from nethergate import GameDisplayApi
+
+class GameDisplayApi:
+    """游戏显示 API"""
+    
+    # Boss 血条
+    async def show_bossbar(
+        self, id: str, title: str, progress: float,
+        color: str = "white", style: str = "progress"
+    ) -> None: ...
+    
+    async def update_bossbar(
+        self, id: str, progress: Optional[float] = None,
+        title: Optional[str] = None
+    ) -> None: ...
+    
+    async def hide_bossbar(self, id: str) -> None: ...
+    
+    # 标题
+    async def show_title(
+        self, selector: str, title: str, subtitle: str = "",
+        fade_in: int = 10, stay: int = 70, fade_out: int = 20
+    ) -> None: ...
+    
+    async def show_subtitle(self, selector: str, subtitle: str) -> None: ...
+    async def clear_title(self, selector: str) -> None: ...
+    
+    # 动作栏
+    async def show_actionbar(self, selector: str, text: str) -> None: ...
+    
+    # 聊天消息
+    async def send_chat_message(self, selector: str, message: str) -> None: ...
+    async def broadcast_message(self, message: str) -> None: ...
+    
+    # 告示牌编辑
+    async def open_sign_editor(self, player_name: str, x: int, y: int, z: int) -> None: ...
+```
+
+**示例**:
+
+```python
+from nethergate import GameDisplayApi, Logger
+import asyncio
+
+class DisplayPlugin:
+    def __init__(self, game_display: GameDisplayApi, logger: Logger):
+        self.display = game_display
+        self.logger = logger
+    
+    async def show_welcome(self, player_name: str):
+        # 显示 Boss 血条
+        await self.display.show_bossbar(
+            id=f"welcome_{player_name}",
+            title=f"§a欢迎 {player_name}！",
+            progress=1.0,
+            color="green",
+            style="progress"
+        )
+        
+        # 显示标题
+        await self.display.show_title(
+            selector=player_name,
+            title="§6欢迎来到服务器",
+            subtitle="§e请遵守规则",
+            fade_in=10,
+            stay=70,
+            fade_out=20
+        )
+        
+        # 显示动作栏
+        await self.display.show_actionbar(
+            selector=player_name,
+            text="§7输入 /help 查看帮助"
+        )
+        
+        # 5秒后隐藏 Boss 血条
+        await asyncio.sleep(5)
+        await self.display.hide_bossbar(f"welcome_{player_name}")
+```
+
+---
+
+## 游戏工具 API
+
+### GameUtilities
+
+高级游戏操作工具（需要 RCON 支持）。
+
+```python
+from nethergate import GameUtilities, Position, Region, FireworkOptions, FireworkType
+
+class GameUtilities:
+    """游戏工具 API"""
+    
+    # 烟花系统
+    async def launch_firework(self, position: Position, options: FireworkOptions) -> None: ...
+    async def launch_firework_show(
+        self, positions: List[Position], options: FireworkOptions, interval_ms: int = 200
+    ) -> None: ...
+    
+    # 命令序列
+    def create_sequence(self) -> CommandSequence: ...
+    
+    # 区域操作
+    async def fill_area(self, region: Region, block_type: str) -> None: ...
+    async def clone_area(self, source: Region, destination: Position) -> None: ...
+    async def set_block(self, position: Position, block_type: str) -> None: ...
+    
+    # 时间和天气
+    async def set_time(self, time: Union[int, str]) -> None: ...
+    async def set_weather(self, weather: str, duration: Optional[int] = None) -> None: ...
+    
+    # 传送
+    async def teleport(self, selector: str, position: Position) -> None: ...
+    async def teleport_relative(self, selector: str, offset: Position) -> None: ...
+    
+    # 效果
+    async def give_effect(
+        self, selector: str, effect: str, duration: int,
+        amplifier: int = 0, hide_particles: bool = False
+    ) -> None: ...
+    async def clear_effects(self, selector: str) -> None: ...
+    
+    # 粒子
+    async def spawn_particle(
+        self, particle: str, position: Position, count: int = 1,
+        spread: Optional[Position] = None, speed: float = 0.0
+    ) -> None: ...
+    
+    # 声音
+    async def play_sound(
+        self, selector: str, sound: str, volume: float = 1.0, pitch: float = 1.0
+    ) -> None: ...
+    async def play_sound_at(
+        self, position: Position, sound: str, volume: float = 1.0, pitch: float = 1.0
+    ) -> None: ...
+    async def stop_sound(self, selector: str, sound: Optional[str] = None) -> None: ...
+```
+
+**数据类型**:
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+
+@dataclass
+class Position:
+    """位置坐标"""
+    x: float
+    y: float
+    z: float
+
+@dataclass
+class Region:
+    """区域（两个位置定义的长方体）"""
+    from_pos: Position
+    to_pos: Position
+
+class FireworkType(Enum):
+    """烟花类型"""
+    SMALL_BALL = "small_ball"
+    LARGE_BALL = "large_ball"
+    STAR = "star"
+    CREEPER = "creeper"
+    BURST = "burst"
+
+@dataclass
+class FireworkOptions:
+    """烟花选项"""
+    type: FireworkType = FireworkType.LARGE_BALL
+    colors: List[str] = field(default_factory=lambda: ["red", "yellow"])
+    fade_colors: List[str] = field(default_factory=list)
+    flicker: bool = False
+    trail: bool = False
+    power: int = 1
+```
+
+**示例**:
+
+```python
+from nethergate import GameUtilities, Position, FireworkOptions, FireworkType, Logger
+import math
+
+class UtilsPlugin:
+    def __init__(self, game_utils: GameUtilities, logger: Logger):
+        self.utils = game_utils
+        self.logger = logger
+    
+    async def launch_celebration(self, x: float, y: float, z: float):
+        # 发射烟花
+        position = Position(x, y, z)
+        options = FireworkOptions(
+            type=FireworkType.LARGE_BALL,
+            colors=["red", "gold", "blue"],
+            flicker=True,
+            trail=True,
+            power=2
+        )
+        
+        await self.utils.launch_firework(position, options)
+        
+        # 播放声音
+        await self.utils.play_sound(
+            '@a',
+            'minecraft:entity.firework_rocket.launch',
+            1.0,
+            1.0
+        )
+    
+    async def countdown_sequence(self):
+        sequence = self.utils.create_sequence()
+        
+        await (sequence
+            .execute(lambda: self.logger.info("3..."))
+            .wait_seconds(1)
+            .execute(lambda: self.logger.info("2..."))
+            .wait_seconds(1)
+            .execute(lambda: self.logger.info("1..."))
+            .wait_seconds(1)
+            .execute(lambda: self.logger.info("GO!"))
+            .run())
+```
+
+---
+
+## 方块数据 API
+
+### BlockDataReader
+
+方块实体数据读取器。
+
+```python
+from nethergate import BlockDataReader, Position, ItemStack, ContainerData
+
+class BlockDataReader:
+    """方块数据读取器"""
+    
+    async def get_chest_items(self, position: Position) -> List[ItemStack]: ...
+    async def get_container_data(self, position: Position) -> Optional[ContainerData]: ...
+    async def get_sign_text(self, position: Position) -> List[str]: ...
+    async def get_block_entity(self, position: Position) -> Optional[Dict[str, Any]]: ...
+    async def is_container(self, position: Position) -> bool: ...
+    async def get_hopper_items(self, position: Position) -> List[ItemStack]: ...
+    async def get_barrel_items(self, position: Position) -> List[ItemStack]: ...
+    async def get_shulker_box_items(self, position: Position) -> List[ItemStack]: ...
+```
+
+### BlockDataWriter
+
+方块实体数据写入器（需要 RCON 支持）。
+
+```python
+from nethergate import BlockDataWriter
+
+class BlockDataWriter:
+    """方块数据写入器"""
+    
+    async def set_chest_items(self, position: Position, items: List[ItemStack]) -> None: ...
+    async def set_container_items(self, position: Position, items: List[ItemStack]) -> None: ...
+    async def set_sign_text(self, position: Position, lines: List[str]) -> None: ...
+    async def update_block_entity(self, position: Position, nbt_data: Dict[str, Any]) -> None: ...
+    async def clear_container(self, position: Position) -> None: ...
+    async def sort_container(self, position: Position, by: str = "id") -> None: ...
+```
+
+**数据类型**:
+
+```python
+@dataclass
+class ItemStack:
+    """物品堆"""
+    id: str
+    count: int
+    slot: int
+    enchantments: List[Enchantment] = field(default_factory=list)
+    custom_name: Optional[str] = None
+
+@dataclass
+class ContainerData:
+    """容器数据"""
+    position: Position
+    type: str
+    items: List[ItemStack] = field(default_factory=list)
+    custom_name: Optional[str] = None
+    lock: Optional[str] = None
+```
+
+**示例**:
+
+```python
+from nethergate import BlockDataReader, BlockDataWriter, Position, ItemStack, Logger
+
+class ChestPlugin:
+    def __init__(self, block_reader: BlockDataReader, block_writer: BlockDataWriter, logger: Logger):
+        self.reader = block_reader
+        self.writer = block_writer
+        self.logger = logger
+    
+    async def get_chest_contents(self, x: int, y: int, z: int):
+        position = Position(x, y, z)
+        items = await self.reader.get_chest_items(position)
+        
+        self.logger.info(f"箱子 ({x}, {y}, {z}) 的内容:")
+        for item in items:
+            self.logger.info(f"[{item.slot}] {item.id} x{item.count}")
+        
+        return items
+    
+    async def set_reward_chest(self, x: int, y: int, z: int):
+        position = Position(x, y, z)
+        items = [
+            ItemStack(id="minecraft:diamond", count=64, slot=0),
+            ItemStack(id="minecraft:gold_ingot", count=32, slot=1)
+        ]
+        
+        await self.writer.set_chest_items(position, items)
+        self.logger.info("奖励箱已设置")
+```
+
+---
+
+## 音乐播放器 API
+
+### MusicPlayer
+
+使用音符盒音效播放音乐（需要 RCON 支持）。
+
+```python
+from nethergate import MusicPlayer, Melody, Note, Instrument
+
+class MusicPlayer:
+    """音乐播放器"""
+    
+    def create_melody(self) -> Melody: ...
+    async def stop_all(self, selector: str) -> None: ...
+    async def play_c_major_scale(self, selector: str) -> None: ...
+    async def play_twinkle_star(self, selector: str) -> None: ...
+
+class Melody:
+    """旋律构建器"""
+    
+    def add_note(
+        self, note: Union[str, Note], duration_ms: int,
+        octave: int = 1, sharp: bool = False
+    ) -> 'Melody': ...
+    
+    def add_rest(self, duration_ms: int) -> 'Melody': ...
+    def set_instrument(self, instrument: Union[str, Instrument]) -> 'Melody': ...
+    def set_volume(self, volume: float) -> 'Melody': ...
+    
+    async def play(self, selector: str) -> None: ...
+    async def loop(self, selector: str, times: int) -> None: ...
+
+class Note(Enum):
+    """音符"""
+    C = "C"
+    D = "D"
+    E = "E"
+    F = "F"
+    G = "G"
+    A = "A"
+    B = "B"
+
+class Instrument(Enum):
+    """乐器"""
+    HARP = "harp"
+    BASS = "bass"
+    GUITAR = "guitar"
+    FLUTE = "flute"
+    BELL = "bell"
+    PLING = "pling"
+    # ... 更多乐器
+```
+
+**示例**:
+
+```python
+from nethergate import MusicPlayer, Note, Instrument, Logger
+
+class MusicPlugin:
+    def __init__(self, music_player: MusicPlayer, logger: Logger):
+        self.player = music_player
+        self.logger = logger
+    
+    async def play_welcome_melody(self, player_name: str):
+        melody = self.player.create_melody()
+        
+        melody.set_instrument(Instrument.HARP)
+        melody.set_volume(1.0)
+        melody.add_note(Note.C, 200)
+        melody.add_note(Note.E, 200)
+        melody.add_note(Note.G, 400)
+        
+        await melody.play(player_name)
+        self.logger.info(f"已为 {player_name} 播放欢迎音乐")
+```
+
+---
+
+## 高级功能 API
+
+### NBT 数据写入
+
+```python
+from nethergate import NbtDataWriter
+
+class NbtDataWriter:
+    """NBT 数据写入器"""
+    
+    async def update_player_health(
+        self, player_uuid: str, health: float, max_health: Optional[float] = None
+    ) -> None: ...
+    
+    async def update_player_food(
+        self, player_uuid: str, food_level: int, saturation: Optional[float] = None
+    ) -> None: ...
+    
+    async def update_player_xp(self, player_uuid: str, xp: int, level: int) -> None: ...
+    
+    async def update_player_position(
+        self, player_uuid: str, position: Position, dimension: Optional[str] = None
+    ) -> None: ...
+    
+    async def update_player_gamemode(self, player_uuid: str, gamemode: int) -> None: ...
+    async def set_player_inventory(self, player_uuid: str, items: List[ItemStack]) -> None: ...
+```
+
+### 玩家档案 API
+
+```python
+from nethergate import PlayerProfileApi, PlayerProfile
+
+class PlayerProfileApi:
+    """玩家档案 API（需要 RCON 支持）"""
+    
+    async def get_profile(self, player_name: str) -> Optional[PlayerProfile]: ...
+    async def get_profile_by_uuid(self, uuid: str) -> Optional[PlayerProfile]: ...
+    async def get_skin_url(self, player_name: str) -> Optional[str]: ...
+    async def get_cape_url(self, player_name: str) -> Optional[str]: ...
+```
+
+### 标签系统 API
+
+```python
+from nethergate import TagApi
+
+class TagApi:
+    """标签系统 API"""
+    
+    async def get_block_tags(self, block: str) -> List[str]: ...
+    async def get_item_tags(self, item: str) -> List[str]: ...
+    async def get_entity_tags(self, entity: str) -> List[str]: ...
+    async def has_tag(self, type: str, name: str, tag: str) -> bool: ...
+    async def get_all_tags(self, type: str) -> List[str]: ...
+```
+
+### 计分板 API
+
+```python
+from nethergate import ScoreboardApi
+
+class ScoreboardApi:
+    """计分板系统 API（需要 RCON 支持）"""
+    
+    # 目标管理
+    async def create_objective(self, name: str, criterion: str, display_name: str) -> None: ...
+    async def remove_objective(self, name: str) -> None: ...
+    async def set_display(self, slot: str, objective: str) -> None: ...
+    
+    # 分数管理
+    async def add_score(self, objective: str, player: str, points: int) -> None: ...
+    async def remove_score(self, objective: str, player: str, points: int) -> None: ...
+    async def set_score(self, objective: str, player: str, points: int) -> None: ...
+    async def get_score(self, objective: str, player: str) -> int: ...
+    async def reset_score(self, objective: str, player: str) -> None: ...
+    async def get_scores(self, objective: str) -> Dict[str, int]: ...
+    
+    # 队伍管理
+    async def create_team(self, name: str) -> None: ...
+    async def remove_team(self, name: str) -> None: ...
+    async def join_team(self, team: str, members: List[str]) -> None: ...
+    async def leave_team(self, members: List[str]) -> None: ...
+```
+
+### 成就追踪 API
+
+```python
+from nethergate import AdvancementTracker, AdvancementProgress
+
+class AdvancementTracker:
+    """成就追踪器"""
+    
+    async def get_player_advancements(self, player_uuid: str) -> List[AdvancementProgress]: ...
+    async def is_advancement_completed(self, player_uuid: str, advancement: str) -> bool: ...
+    async def get_completion_percentage(self, player_uuid: str) -> float: ...
+    def on_advancement_completed(self, handler: Callable[[str, str], None]) -> None: ...
+```
+
+### 统计追踪 API
+
+```python
+from nethergate import StatisticsTracker, StatisticsData
+
+class StatisticsTracker:
+    """统计数据追踪器"""
+    
+    async def get_player_statistics(self, player_uuid: str) -> Optional[StatisticsData]: ...
+    async def get_stat(self, player_uuid: str, stat: str) -> int: ...
+    async def get_top_players(self, stat: str, limit: int = 10) -> List[tuple[str, int]]: ...
+```
+
+### 排行榜系统 API
+
+```python
+from nethergate import LeaderboardSystem, Leaderboard, LeaderboardEntry
+
+class LeaderboardSystem:
+    """排行榜系统"""
+    
+    async def create(self, name: str, sort_order: str = "descending") -> Leaderboard: ...
+    async def get(self, name: str) -> Optional[Leaderboard]: ...
+    async def delete(self, name: str) -> None: ...
+    async def list(self) -> List[str]: ...
+
+class Leaderboard:
+    """排行榜"""
+    
+    def get_name(self) -> str: ...
+    async def add_score(self, player: str, score: float, metadata: Optional[Dict[str, Any]] = None) -> None: ...
+    async def get_score(self, player: str) -> float: ...
+    async def get_rank(self, player: str) -> int: ...
+    async def get_top(self, limit: int = 10) -> List[LeaderboardEntry]: ...
+    async def remove(self, player: str) -> None: ...
+    async def clear(self) -> None: ...
+    async def get_all(self) -> List[LeaderboardEntry]: ...
+```
+
+---
+
+## 系统功能 API
+
+### 文件系统
+
+```python
+from nethergate import FileWatcher, ServerFileAccess, BackupManager
+
+class FileWatcher:
+    """文件监听器"""
+    def watch(self, path: str, handler: Callable[[FileChangeEvent], None]) -> None: ...
+    def unwatch(self, path: str) -> None: ...
+
+class ServerFileAccess:
+    """服务器文件访问"""
+    async def read_text(self, relative_path: str) -> str: ...
+    async def read_bytes(self, relative_path: str) -> bytes: ...
+    async def write_text(self, relative_path: str, content: str) -> None: ...
+    async def write_bytes(self, relative_path: str, data: bytes) -> None: ...
+    async def exists(self, relative_path: str) -> bool: ...
+    async def delete(self, relative_path: str) -> None: ...
+    async def list_files(self, directory_path: str) -> List[str]: ...
+```
+
+### 性能监控
+
+```python
+from nethergate import PerformanceMonitor, PerformanceMetrics
+
+class PerformanceMonitor:
+    """性能监控器"""
+    async def get_current_metrics(self) -> PerformanceMetrics: ...
+    def start_monitoring(self, interval_ms: int, callback: Callable[[PerformanceMetrics], None]) -> None: ...
+    def stop_monitoring(self) -> None: ...
+```
+
+### WebSocket / 数据推送
+
+```python
+from nethergate import DataBroadcaster
+
+class DataBroadcaster:
+    """数据广播器"""
+    async def broadcast(self, channel: str, data: Any) -> None: ...
+    async def send(self, client_id: str, channel: str, data: Any) -> None: ...
+    def get_connected_clients(self) -> List[str]: ...
+    def is_client_connected(self, client_id: str) -> bool: ...
+```
+
+### 插件间通信
+
+```python
+from nethergate import PluginMessenger
+
+class PluginMessenger:
+    """插件间消息传递器"""
+    async def send_message(self, plugin_id: str, channel: str, data: Any) -> Any: ...
+    def subscribe(self, channel: str, handler: Callable[[Any, str], Any]) -> None: ...
+    def unsubscribe(self, channel: str) -> None: ...
+```
+
+---
+
 ## 相关文档
 
+- [Python 核心 API 使用指南](../03-插件开发/Python核心API使用指南.md)
 - [Python 插件开发指南](../03-插件开发/Python插件开发指南.md)
 - [Python 示例插件集](../07-示例和最佳实践/Python示例插件集.md)
-- [C# API 参考](API参考.md)
+- [C# API 参考](./API参考.md)
+
+---
+
+**注意**: Python API 功能持续更新中，部分 API 可能尚未完全实现。如遇问题请参考文档或提交 Issue。
 

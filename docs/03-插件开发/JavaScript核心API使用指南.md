@@ -796,6 +796,206 @@ this.eventBus.publish({
 
 ---
 
+## 高级 API 使用示例
+
+以下是更多高级功能的使用示例，包括 SMP、RCON、游戏显示等高级 API。
+
+### SMP 协议使用
+
+#### 玩家管理
+
+```javascript
+class PlayerManager {
+    constructor(smpApi, logger) {
+        this.smpApi = smpApi;
+        this.logger = logger;
+    }
+    
+    async getOnlinePlayers() {
+        try {
+            const players = await this.smpApi.getPlayers();
+            this.logger.info(`在线玩家数量: ${players.length}`);
+            
+            players.forEach(player => {
+                this.logger.info(`- ${player.name} (${player.uuid})`);
+            });
+            
+            return players;
+        } catch (error) {
+            this.logger.error("获取玩家列表失败", error);
+        }
+    }
+    
+    async kickPlayer(playerName, reason) {
+        try {
+            await this.smpApi.kickPlayer(playerName, reason);
+            this.logger.info(`已踢出玩家: ${playerName}`);
+        } catch (error) {
+            this.logger.error(`踢出玩家失败: ${playerName}`, error);
+        }
+    }
+}
+```
+
+#### 白名单管理
+
+```javascript
+class WhitelistManager {
+    constructor(smpApi, logger) {
+        this.smpApi = smpApi;
+        this.logger = logger;
+    }
+    
+    async addPlayer(playerName, uuid) {
+        try {
+            const player = { name: playerName, uuid: uuid };
+            await this.smpApi.addToAllowlist(player);
+            this.logger.info(`已添加到白名单: ${playerName}`);
+        } catch (error) {
+            this.logger.error("添加白名单失败", error);
+        }
+    }
+    
+    async getWhitelist() {
+        try {
+            const list = await this.smpApi.getAllowlist();
+            this.logger.info("白名单玩家:");
+            list.forEach(player => {
+                this.logger.info(`- ${player.name}`);
+            });
+            return list;
+        } catch (error) {
+            this.logger.error("获取白名单失败", error);
+        }
+    }
+}
+```
+
+### RCON 命令执行
+
+```javascript
+class CommandExecutor {
+    constructor(rconClient, logger) {
+        this.rcon = rconClient;
+        this.logger = logger;
+    }
+    
+    async executeCommand(command) {
+        try {
+            const result = await this.rcon.execute(command);
+            
+            if (result.success) {
+                this.logger.info(`命令执行成功: ${command}`);
+                this.logger.info(`响应: ${result.response}`);
+            } else {
+                this.logger.error(`命令执行失败: ${command}`);
+            }
+            
+            return result;
+        } catch (error) {
+            this.logger.error("执行命令时出错", error);
+        }
+    }
+    
+    async giveItem(player, item, count = 1) {
+        return await this.executeCommand(`give ${player} ${item} ${count}`);
+    }
+    
+    async teleport(player, x, y, z) {
+        return await this.executeCommand(`tp ${player} ${x} ${y} ${z}`);
+    }
+}
+```
+
+### 游戏显示 API
+
+#### Boss 血条
+
+```javascript
+class BossBarDisplay {
+    constructor(gameDisplay, logger) {
+        this.gameDisplay = gameDisplay;
+        this.logger = logger;
+    }
+    
+    async showWelcomeBossBar(playerName) {
+        try {
+            await this.gameDisplay.showBossBar(
+                "welcome_" + playerName,
+                `§a欢迎 ${playerName} 来到服务器！`,
+                1.0,
+                "green",
+                "progress"
+            );
+            
+            setTimeout(async () => {
+                await this.gameDisplay.hideBossBar("welcome_" + playerName);
+            }, 5000);
+        } catch (error) {
+            this.logger.error("显示 Boss 血条失败", error);
+        }
+    }
+}
+```
+
+#### 标题显示
+
+```javascript
+class TitleDisplay {
+    constructor(gameDisplay, logger) {
+        this.gameDisplay = gameDisplay;
+        this.logger = logger;
+    }
+    
+    async showWelcome(playerName) {
+        try {
+            await this.gameDisplay.showTitle(
+                playerName,
+                "§6欢迎来到服务器",
+                "§e请遵守服务器规则",
+                10, 70, 20
+            );
+        } catch (error) {
+            this.logger.error("显示欢迎标题失败", error);
+        }
+    }
+}
+```
+
+### 游戏工具 API
+
+#### 烟花系统
+
+```javascript
+class FireworkSystem {
+    constructor(gameUtilities, logger) {
+        this.gameUtils = gameUtilities;
+        this.logger = logger;
+    }
+    
+    async launchFirework(x, y, z, type = 'large_ball') {
+        try {
+            const position = { x, y, z };
+            const options = {
+                type: type,
+                colors: ['red', 'yellow', 'blue'],
+                fadeColors: ['orange', 'white'],
+                flicker: true,
+                trail: true,
+                power: 2
+            };
+            
+            await this.gameUtils.launchFirework(position, options);
+            this.logger.info(`烟花已发射: (${x}, ${y}, ${z})`);
+        } catch (error) {
+            this.logger.error("发射烟花失败", error);
+        }
+    }
+}
+```
+
+---
+
 ## 下一步
 
 - 查看 [JavaScript API 参考](../../08-参考/JavaScript_API参考.md) 了解完整的 API 文档
@@ -804,7 +1004,7 @@ this.eventBus.publish({
 
 ---
 
-**最后更新**: 2025-10-11  
+**最后更新**: 2025-10-12  
 **维护者**: NetherGate Team
 
 

@@ -757,9 +757,238 @@ for player in player_list:
 
 ---
 
+## 高级 API 使用示例
+
+以下是更多高级功能的使用示例，包括游戏显示、游戏工具、方块数据等高级 API。
+
+### 游戏显示 API
+
+#### Boss 血条
+
+```python
+from nethergate import GameDisplayApi, Logger
+import asyncio
+
+class BossBarDisplay:
+    def __init__(self, game_display: GameDisplayApi, logger: Logger):
+        self.display = game_display
+        self.logger = logger
+    
+    async def show_welcome_bossbar(self, player_name: str):
+        """显示欢迎 Boss 血条"""
+        try:
+            await self.display.show_bossbar(
+                id=f"welcome_{player_name}",
+                title=f"§a欢迎 {player_name} 来到服务器！",
+                progress=1.0,
+                color="green",
+                style="progress"
+            )
+            
+            await asyncio.sleep(5)
+            await self.display.hide_bossbar(f"welcome_{player_name}")
+        except Exception as e:
+            self.logger.error("显示 Boss 血条失败", e)
+```
+
+#### 标题显示
+
+```python
+from nethergate import GameDisplayApi, Logger
+
+class TitleDisplay:
+    def __init__(self, game_display: GameDisplayApi, logger: Logger):
+        self.display = game_display
+        self.logger = logger
+    
+    async def show_welcome(self, player_name: str):
+        """显示欢迎标题"""
+        try:
+            await self.display.show_title(
+                selector=player_name,
+                title="§6欢迎来到服务器",
+                subtitle="§e请遵守服务器规则",
+                fade_in=10,
+                stay=70,
+                fade_out=20
+            )
+        except Exception as e:
+            self.logger.error("显示欢迎标题失败", e)
+```
+
+### 游戏工具 API
+
+#### 烟花系统
+
+```python
+from nethergate import GameUtilities, Position, FireworkOptions, FireworkType, Logger
+import math
+
+class FireworkSystem:
+    def __init__(self, game_utils: GameUtilities, logger: Logger):
+        self.utils = game_utils
+        self.logger = logger
+    
+    async def launch_firework(self, x: float, y: float, z: float):
+        """发射单个烟花"""
+        try:
+            position = Position(x, y, z)
+            options = FireworkOptions(
+                type=FireworkType.LARGE_BALL,
+                colors=["red", "yellow", "blue"],
+                fade_colors=["orange", "white"],
+                flicker=True,
+                trail=True,
+                power=2
+            )
+            
+            await self.utils.launch_firework(position, options)
+            self.logger.info(f"烟花已发射: ({x}, {y}, {z})")
+        except Exception as e:
+            self.logger.error("发射烟花失败", e)
+```
+
+### 方块数据操作
+
+```python
+from nethergate import BlockDataReader, BlockDataWriter, Position, ItemStack, Logger
+
+class ChestManager:
+    def __init__(self, block_reader: BlockDataReader, block_writer: BlockDataWriter, logger: Logger):
+        self.reader = block_reader
+        self.writer = block_writer
+        self.logger = logger
+    
+    async def get_chest_contents(self, x: int, y: int, z: int):
+        """读取箱子内容"""
+        try:
+            position = Position(x, y, z)
+            items = await self.reader.get_chest_items(position)
+            
+            self.logger.info(f"箱子 ({x}, {y}, {z}) 的内容:")
+            for item in items:
+                self.logger.info(f"[{item.slot}] {item.id} x{item.count}")
+            
+            return items
+        except Exception as e:
+            self.logger.error("读取箱子失败", e)
+```
+
+### 音乐播放器
+
+```python
+from nethergate import MusicPlayer, Note, Instrument, Logger
+
+class MusicExample:
+    def __init__(self, music_player: MusicPlayer, logger: Logger):
+        self.player = music_player
+        self.logger = logger
+    
+    async def play_welcome_melody(self, player_name: str):
+        """播放欢迎旋律"""
+        try:
+            melody = self.player.create_melody()
+            melody.set_instrument(Instrument.HARP)
+            melody.set_volume(1.0)
+            
+            # 创建简单旋律
+            melody.add_note(Note.C, 200)
+            melody.add_note(Note.E, 200)
+            melody.add_note(Note.G, 400)
+            
+            await melody.play(player_name)
+            self.logger.info(f"已为 {player_name} 播放欢迎音乐")
+        except Exception as e:
+            self.logger.error("播放音乐失败", e)
+```
+
+### 计分板系统
+
+```python
+from nethergate import ScoreboardApi, Logger
+
+class ScoreboardExample:
+    def __init__(self, scoreboard: ScoreboardApi, logger: Logger):
+        self.scoreboard = scoreboard
+        self.logger = logger
+    
+    async def setup_player_scores(self):
+        """设置玩家计分板"""
+        try:
+            # 创建目标
+            await self.scoreboard.create_objective(
+                name="kills",
+                criterion="playerKillCount",
+                display_name="§6击杀数"
+            )
+            
+            # 设置显示位置
+            await self.scoreboard.set_display("sidebar", "kills")
+            
+            self.logger.info("计分板已设置")
+        except Exception as e:
+            self.logger.error("设置计分板失败", e)
+```
+
+### 完整示例插件
+
+```python
+from nethergate import (
+    Plugin, PluginInfo, Logger, EventBus,
+    GameDisplayApi, SmpApi, RconClient
+)
+import asyncio
+
+class WelcomePlugin(Plugin):
+    """欢迎插件 - 展示 Python API 综合使用"""
+    
+    def __init__(self, logger: Logger, event_bus: EventBus):
+        self.info = PluginInfo(
+            id="com.example.welcome",
+            name="Welcome Plugin",
+            version="1.0.0",
+            description="向新玩家展示欢迎消息"
+        )
+        
+        self.logger = logger
+        self.event_bus = event_bus
+        self.first_join_players = set()
+    
+    async def on_enable(self):
+        self.logger.info("欢迎插件已启用")
+        
+        # 订阅玩家加入事件
+        self.event_bus.subscribe("PlayerJoinedEvent", self.handle_player_join)
+    
+    async def handle_player_join(self, event):
+        player_name = event.player_name
+        self.logger.info(f"{player_name} 加入了游戏")
+        
+        try:
+            is_first_join = player_name not in self.first_join_players
+            
+            if is_first_join:
+                self.first_join_players.add(player_name)
+                await self.show_welcome_sequence(player_name)
+        except Exception as e:
+            self.logger.error("处理玩家加入失败", e)
+    
+    async def show_welcome_sequence(self, player_name: str):
+        """显示欢迎序列"""
+        await asyncio.sleep(1)
+        self.logger.info(f"欢迎新玩家: {player_name}")
+```
+
+---
+
 ## 下一步
 
 - 查看 [Python API 参考](../../08-参考/Python_API参考.md) 了解完整的 API 文档
 - 查看 [Python 插件开发指南](./Python插件开发指南.md) 了解插件结构
 - 查看 [Python 示例插件集](../../07-示例和最佳实践/Python示例插件集.md) 查看更多实际示例
+
+---
+
+**最后更新**: 2025-10-12  
+**维护者**: NetherGate Team
 

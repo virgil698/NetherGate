@@ -1192,8 +1192,402 @@ module.exports = ComprehensivePlugin;
 
 ---
 
+## 游戏显示 API
+
+### GameDisplayApi
+
+游戏内显示功能接口（需要 RCON 支持）。
+
+```typescript
+interface GameDisplayApi {
+    // Boss 血条
+    showBossBar(id: string, title: string, progress: number, color?: string, style?: string): Promise<void>;
+    updateBossBar(id: string, progress?: number, title?: string): Promise<void>;
+    hideBossBar(id: string): Promise<void>;
+    
+    // 标题
+    showTitle(selector: string, title: string, subtitle?: string, fadeIn?: number, stay?: number, fadeOut?: number): Promise<void>;
+    showSubtitle(selector: string, subtitle: string): Promise<void>;
+    clearTitle(selector: string): Promise<void>;
+    
+    // 动作栏
+    showActionBar(selector: string, text: string): Promise<void>;
+    
+    // 聊天消息
+    sendChatMessage(selector: string, message: string): Promise<void>;
+    broadcastMessage(message: string): Promise<void>;
+    
+    // 告示牌编辑
+    openSignEditor(playerName: string, x: number, y: number, z: number): Promise<void>;
+}
+```
+
+**示例**:
+
+```javascript
+class DisplayPlugin {
+    constructor(gameDisplay, logger) {
+        this.display = gameDisplay;
+        this.logger = logger;
+    }
+    
+    async showWelcome(playerName) {
+        // 显示 Boss 血条
+        await this.display.showBossBar(
+            `welcome_${playerName}`,
+            `§a欢迎 ${playerName}！`,
+            1.0,
+            "green",
+            "progress"
+        );
+        
+        // 显示标题
+        await this.display.showTitle(
+            playerName,
+            "§6欢迎来到服务器",
+            "§e请遵守规则",
+            10, 70, 20
+        );
+        
+        // 显示动作栏
+        await this.display.showActionBar(
+            playerName,
+            "§7输入 /help 查看帮助"
+        );
+        
+        // 5秒后隐藏 Boss 血条
+        setTimeout(async () => {
+            await this.display.hideBossBar(`welcome_${playerName}`);
+        }, 5000);
+    }
+}
+```
+
+---
+
+## 游戏工具 API
+
+### GameUtilities
+
+高级游戏操作工具（需要 RCON 支持）。
+
+```typescript
+interface GameUtilities {
+    // 烟花系统
+    launchFirework(position: Position, options: FireworkOptions): Promise<void>;
+    launchFireworkShow(positions: Position[], options: FireworkOptions, intervalMs?: number): Promise<void>;
+    
+    // 命令序列
+    createSequence(): CommandSequence;
+    
+    // 区域操作
+    fillArea(region: Region, blockType: string): Promise<void>;
+    cloneArea(source: Region, destination: Position): Promise<void>;
+    setBlock(position: Position, blockType: string): Promise<void>;
+    
+    // 时间和天气
+    setTime(time: number | string): Promise<void>;
+    setWeather(weather: string, duration?: number): Promise<void>;
+    
+    // 传送
+    teleport(selector: string, position: Position): Promise<void>;
+    teleportRelative(selector: string, offset: Position): Promise<void>;
+    
+    // 效果
+    giveEffect(selector: string, effect: string, duration: number, amplifier?: number, hideParticles?: boolean): Promise<void>;
+    clearEffects(selector: string): Promise<void>;
+    
+    // 粒子
+    spawnParticle(particle: string, position: Position, count?: number, spread?: Position, speed?: number): Promise<void>;
+    
+    // 声音
+    playSound(selector: string, sound: string, volume?: number, pitch?: number): Promise<void>;
+    playSoundAt(position: Position, sound: string, volume?: number, pitch?: number): Promise<void>;
+    stopSound(selector: string, sound?: string): Promise<void>;
+}
+
+interface Position {
+    x: number;
+    y: number;
+    z: number;
+}
+
+interface Region {
+    from: Position;
+    to: Position;
+}
+
+interface FireworkOptions {
+    type: string;        // 'small_ball', 'large_ball', 'star', 'creeper', 'burst'
+    colors: string[];
+    fadeColors?: string[];
+    flicker?: boolean;
+    trail?: boolean;
+    power?: number;
+}
+
+interface CommandSequence {
+    execute(action: () => void | Promise<void>): CommandSequence;
+    waitTicks(ticks: number): CommandSequence;
+    waitSeconds(seconds: number): CommandSequence;
+    repeat(times: number): CommandSequence;
+    run(): Promise<void>;
+}
+```
+
+**示例**:
+
+```javascript
+class UtilsPlugin {
+    constructor(gameUtils, logger) {
+        this.utils = gameUtils;
+        this.logger = logger;
+    }
+    
+    async launchCelebration(x, y, z) {
+        // 发射烟花
+        const position = { x, y, z };
+        const options = {
+            type: 'large_ball',
+            colors: ['red', 'gold', 'blue'],
+            flicker: true,
+            trail: true,
+            power: 2
+        };
+        
+        await this.utils.launchFirework(position, options);
+        
+        // 播放声音
+        await this.utils.playSound(
+            '@a',
+            'minecraft:entity.firework_rocket.launch',
+            1.0,
+            1.0
+        );
+    }
+    
+    async countdownSequence(playerName) {
+        await this.utils.createSequence()
+            .execute(() => this.logger.info("3..."))
+            .waitSeconds(1)
+            .execute(() => this.logger.info("2..."))
+            .waitSeconds(1)
+            .execute(() => this.logger.info("1..."))
+            .waitSeconds(1)
+            .execute(() => this.logger.info("GO!"))
+            .run();
+    }
+}
+```
+
+---
+
+## 方块数据 API
+
+### BlockDataReader
+
+方块实体数据读取器。
+
+```typescript
+interface BlockDataReader {
+    getChestItems(position: Position): Promise<ItemStack[]>;
+    getContainerData(position: Position): Promise<ContainerData | null>;
+    getSignText(position: Position): Promise<string[]>;
+    getBlockEntity(position: Position): Promise<any>;
+    isContainer(position: Position): Promise<boolean>;
+    getHopperItems(position: Position): Promise<ItemStack[]>;
+    getBarrelItems(position: Position): Promise<ItemStack[]>;
+    getShulkerBoxItems(position: Position): Promise<ItemStack[]>;
+}
+
+interface ItemStack {
+    id: string;
+    count: number;
+    slot: number;
+    enchantments?: Enchantment[];
+    customName?: string;
+}
+
+interface ContainerData {
+    position: Position;
+    type: string;
+    items: ItemStack[];
+    customName?: string;
+    lock?: string;
+}
+```
+
+### BlockDataWriter
+
+方块实体数据写入器（需要 RCON 支持）。
+
+```typescript
+interface BlockDataWriter {
+    setChestItems(position: Position, items: ItemStack[]): Promise<void>;
+    setContainerItems(position: Position, items: ItemStack[]): Promise<void>;
+    setSignText(position: Position, lines: string[]): Promise<void>;
+    updateBlockEntity(position: Position, nbtData: any): Promise<void>;
+    clearContainer(position: Position): Promise<void>;
+    sortContainer(position: Position, by?: string): Promise<void>;
+}
+```
+
+**示例**:
+
+```javascript
+class ChestPlugin {
+    constructor(blockReader, blockWriter, logger) {
+        this.reader = blockReader;
+        this.writer = blockWriter;
+        this.logger = logger;
+    }
+    
+    async getChestContents(x, y, z) {
+        const position = { x, y, z };
+        const items = await this.reader.getChestItems(position);
+        
+        this.logger.info(`箱子 (${x}, ${y}, ${z}) 的内容:`);
+        items.forEach(item => {
+            this.logger.info(`[${item.slot}] ${item.id} x${item.count}`);
+        });
+        
+        return items;
+    }
+    
+    async setRewardChest(x, y, z) {
+        const position = { x, y, z };
+        const items = [
+            { id: 'minecraft:diamond', count: 64, slot: 0 },
+            { id: 'minecraft:gold_ingot', count: 32, slot: 1 }
+        ];
+        
+        await this.writer.setChestItems(position, items);
+        this.logger.info("奖励箱已设置");
+    }
+}
+```
+
+---
+
+## 音乐播放器 API
+
+### MusicPlayer
+
+使用音符盒音效播放音乐（需要 RCON 支持）。
+
+```typescript
+interface MusicPlayer {
+    createMelody(): Melody;
+    stopAll(selector: string): Promise<void>;
+    playCMajorScale(selector: string): Promise<void>;
+    playTwinkleStar(selector: string): Promise<void>;
+}
+
+interface Melody {
+    addNote(note: string, durationMs: number, octave?: number, sharp?: boolean): Melody;
+    addRest(durationMs: number): Melody;
+    setInstrument(instrument: string): Melody;
+    setVolume(volume: number): Melody;
+    play(selector: string): Promise<void>;
+    loop(selector: string, times: number): Promise<void>;
+}
+```
+
+**示例**:
+
+```javascript
+class MusicPlugin {
+    constructor(musicPlayer, logger) {
+        this.player = musicPlayer;
+        this.logger = logger;
+    }
+    
+    async playWelcomeMelody(playerName) {
+        const melody = this.player.createMelody();
+        
+        melody.setInstrument('harp')
+              .setVolume(1.0)
+              .addNote('C', 200)
+              .addNote('E', 200)
+              .addNote('G', 400);
+        
+        await melody.play(playerName);
+        this.logger.info(`已为 ${playerName} 播放欢迎音乐`);
+    }
+}
+```
+
+---
+
+## 高级功能 API
+
+### 玩家档案 API
+
+```typescript
+interface PlayerProfileApi {
+    getProfile(playerName: string): Promise<PlayerProfile | null>;
+    getProfileByUuid(uuid: string): Promise<PlayerProfile | null>;
+    getSkinUrl(playerName: string): Promise<string | null>;
+    getCapeUrl(playerName: string): Promise<string | null>;
+}
+
+interface PlayerProfile {
+    uuid: string;
+    name: string;
+    properties: ProfileProperty[];
+}
+```
+
+### 标签系统 API
+
+```typescript
+interface TagApi {
+    getBlockTags(block: string): Promise<string[]>;
+    getItemTags(item: string): Promise<string[]>;
+    getEntityTags(entity: string): Promise<string[]>;
+    hasTag(type: string, name: string, tag: string): Promise<boolean>;
+    getAllTags(type: string): Promise<string[]>;
+}
+```
+
+### 成就追踪 API
+
+```typescript
+interface AdvancementTracker {
+    getPlayerAdvancements(playerUuid: string): Promise<AdvancementProgress[]>;
+    isAdvancementCompleted(playerUuid: string, advancement: string): Promise<boolean>;
+    getCompletionPercentage(playerUuid: string): Promise<number>;
+    onAdvancementCompleted(handler: (playerUuid: string, advancementName: string) => void): void;
+}
+```
+
+### 排行榜系统 API
+
+```typescript
+interface LeaderboardSystem {
+    create(name: string, sortOrder?: string): Promise<Leaderboard>;
+    get(name: string): Promise<Leaderboard | null>;
+    delete(name: string): Promise<void>;
+    list(): Promise<string[]>;
+}
+
+interface Leaderboard {
+    getName(): string;
+    addScore(player: string, score: number, metadata?: any): Promise<void>;
+    getScore(player: string): Promise<number>;
+    getRank(player: string): Promise<number>;
+    getTop(limit?: number): Promise<LeaderboardEntry[]>;
+    remove(player: string): Promise<void>;
+    clear(): Promise<void>;
+    getAll(): Promise<LeaderboardEntry[]>;
+}
+```
+
+---
+
 ## 相关文档
 
+- [JavaScript 核心 API 使用指南](../03-插件开发/JavaScript核心API使用指南.md)
 - [JavaScript 插件开发指南](../03-插件开发/JavaScript插件开发指南.md)
 - [JavaScript 插件架构说明](../05-配置和部署/JavaScript插件架构说明.md)
 - [C# API 参考](./API参考.md)
